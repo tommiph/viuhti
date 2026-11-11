@@ -24,6 +24,7 @@ const digest = require('./lib/digest');
 const alerts = require('./lib/alerts');
 const recommender = require('./lib/recommender');
 const galaxy = require('./lib/galaxy');
+const wiki = require('./lib/wiki');
 
 tmdb.setKeyProvider(() => store.getTmdbApiKey());
 
@@ -227,7 +228,13 @@ function buildIcsFeed({ media = 'both', favoritesOnly = false } = {}) {
       const code = `S${String(e.season).padStart(2, '0')}E${e.number == null ? 'SP' : String(e.number).padStart(2, '0')}`;
       const summary = `${s.name} · ${code}${e.name ? ` — ${e.name}` : ''}`;
       const ch = (s.network && s.network.name) || (s.webChannel && s.webChannel.name) || '';
-      const desc = [ch ? `Channel: ${ch}` : '', (s.genres || []).join(', ')].filter(Boolean).join(' · ');
+      const desc = [
+        e.virtual ? `Director's Choice (Orig ${e.originYear || ''})` : '',
+        ch ? `Channel: ${ch}` : '',
+        (s.genres || []).join(', '),
+      ]
+        .filter(Boolean)
+        .join(' · ');
       const cats = [e.premiere === 'series' ? 'Series Premiere' : e.premiere === 'season' ? 'Season Premiere' : '', ...(s.genres || [])]
         .filter(Boolean)
         .join(',');
@@ -314,6 +321,28 @@ async function handleApi(req, res, url) {
     return sendJson(res, 200, store.listShows({ includeHidden: shouldIncludeHidden(searchParams) }), req);
   }
 
+  if (pathname === '/api/item/rich' && method === 'GET') {
+    const kind = searchParams.get('kind') === 'movie' ? 'movie' : 'show';
+    const id = Number(searchParams.get('id')) || null;
+    const tvmazeId = Number(searchParams.get('tvmazeId')) || null;
+    const tmdbId = Number(searchParams.get('tmdbId')) || null;
+    const imdbId = (searchParams.get('imdbId') || '').trim() || null;
+    const name = (searchParams.get('name') || '').trim();
+    const year = (searchParams.get('year') || '').slice(0, 4);
+    const out = await galaxy.getRichItemDetails({
+      kind,
+      id,
+      tvmazeId,
+      tmdbId,
+      imdbId,
+      name,
+      year,
+      store,
+      movies,
+    });
+    return sendJson(res, 200, out, req);
+  }
+
   const itemDetail = pathname.match(/^\/api\/item\/(show|movie)\/(\d+)$/);
   if (itemDetail && method === 'GET') {
     const [, kind, id] = itemDetail;
@@ -338,6 +367,38 @@ async function handleApi(req, res, url) {
     const show = store.setFavorite(fav[1], body.favorite);
     if (!show) return sendJson(res, 404, { error: 'Show not found' });
     return sendJson(res, 200, { ok: true, id: show.id, favorite: show.favorite, show });
+  }
+
+  const dcRoute = pathname.match(/^\/api\/shows\/(\d+)\/directors-choice$/);
+  if (dcRoute && method === 'POST') {
+    const body = await readBody(req).catch(() => ({}));
+    let id = Number(dcRoute[1]) || 0;
+    if (!id && (body.imdbId || body.name)) {
+      const resolved = await tvmaze.resolveShow({ imdbId: body.imdbId || null, name: body.name || '', year: body.year || '' }).catch(() => null);
+      if (resolved && resolved.id) id = resolved.id;
+    }
+    if (!id) return sendJson(res, 404, { error: 'Could not resolve show on TVmaze' });
+    if (!store.isTracked(id)) {
+      if (hidden.has('show', id)) {
+        const entry = hidden.take('show', id);
+        if (entry && entry.record) await store.restoreShow(entry.record);
+        else await store.addShow(id, 'directors-choice');
+      } else {
+        await store.addShow(id, 'directors-choice');
+      }
+    }
+    const show = store.setDirectorsChoice(id, body.enabled, { anchorDate: body.anchorDate || null });
+    if (!show) return sendJson(res, 404, { error: 'Show not found' });
+    if (show.directorsChoice && show.directorsChoice.enabled && !store.getSettings().showDirectorsChoice) {
+      store.saveSettings({ showDirectorsChoice: true });
+    }
+    return sendJson(res, 200, {
+      ok: true,
+      id: show.id,
+      directorsChoice: show.directorsChoice,
+      show,
+      settings: store.getSettings(),
+    });
   }
 
   const extq = pathname.match(/^\/api\/shows\/(\d+)\/(?:ext|td)-query$/);
@@ -449,11 +510,15 @@ async function handleApi(req, res, url) {
     return sendJson(
       res,
       200,
-      results.map((item) => ({
-        ...item,
-        onCalendar: item.kind === 'movie' ? movies.isTracked(item.id) : store.isTracked(item.id),
-        hidden: item.kind === 'movie' ? hidden.has('movie', item.id) : hidden.has('show', item.id),
-      }))
+      results.map((item) => {
+        const meta = item.kind !== 'movie' && store.isTracked(item.id) ? store.getShowMeta(item.id) : null;
+        return {
+          ...item,
+          onCalendar: item.kind === 'movie' ? movies.isTracked(item.id) : store.isTracked(item.id),
+          hidden: item.kind === 'movie' ? hidden.has('movie', item.id) : hidden.has('show', item.id),
+          ...(meta && meta.directorsChoice ? { directorsChoice: meta.directorsChoice } : {}),
+        };
+      })
     );
   }
 
@@ -463,11 +528,14 @@ async function handleApi(req, res, url) {
     if (!isDate(from) || !isDate(to)) return sendJson(res, 400, { error: 'from/to must be YYYY-MM-DD' });
     const withSummaries = searchParams.get('summaries') === '1';
     const includeHidden = shouldIncludeHidden(searchParams);
+    const includeDirectorsChoice = searchParams.has('directorsChoice')
+      ? searchParams.get('directorsChoice') === '1'
+      : undefined;
     return sendJson(
       res,
       200,
       {
-        episodes: store.schedule(from, to, { withSummaries, includeHidden }),
+        episodes: store.schedule(from, to, { withSummaries, includeHidden, includeDirectorsChoice }),
         movies: movies.schedule(from, to, { withSummaries, includeHidden }),
         settings: store.getSettings(),
       },
@@ -669,16 +737,20 @@ async function handleApi(req, res, url) {
     const seedId = searchParams.get('seedId') || '';
     const seedTmdbId = searchParams.get('seedTmdbId') || '';
     const seedKeywordId = searchParams.get('seedKeywordId') || '';
+    const seedQid = searchParams.get('seedQid') || '';
+    const seedWikiTitle = searchParams.get('seedWikiTitle') || '';
     const seedName = searchParams.get('seedName') || '';
     const imdbId = searchParams.get('imdbId') || '';
     const showDarkMatter = searchParams.get('darkMatter') === '1';
 
-    if (seedKind || seedId || seedTmdbId || seedName) {
+    if (seedKind || seedId || seedTmdbId || seedQid || seedName) {
       const data = await galaxy.buildSeedGalaxy({
         seedKind: seedKind || 'show',
         seedId: seedId || null,
         seedTmdbId: seedTmdbId || null,
         seedKeywordId: seedKeywordId || null,
+        seedQid: seedQid || null,
+        seedWikiTitle: seedWikiTitle || null,
         seedName,
         imdbId: imdbId || null,
         store,
@@ -698,12 +770,37 @@ async function handleApi(req, res, url) {
     const out = await galaxy.expandNode({
       node: body.node || {},
       existingKeys: body.existingKeys || [],
+      includeWiki: Boolean(body.includeWiki),
       store,
       movies,
       hidden,
       watched,
     });
     return sendJson(res, 200, out, req);
+  }
+
+  if (pathname === '/api/galaxy/wiki' && method === 'GET') {
+    const kind = searchParams.get('kind') || 'show';
+    const name = (searchParams.get('name') || '').trim();
+    const year = (searchParams.get('year') || '').slice(0, 4);
+    const qid = (searchParams.get('qid') || '').trim() || null;
+    const wikiTitle = (searchParams.get('wikiTitle') || '').trim() || null;
+    let imdbId = (searchParams.get('imdbId') || '').trim() || null;
+    const tvmazeId = Number(searchParams.get('tvmazeId')) || null;
+    const tmdbId = Number(searchParams.get('tmdbId')) || null;
+
+    if (!imdbId && kind === 'show' && tvmazeId) {
+      const cachedShow = store.getCached(tvmazeId) || store.loadCachedFromDisk(tvmazeId);
+      const showImdb = cachedShow && cachedShow.show && cachedShow.show.externals && cachedShow.show.externals.imdb;
+      const recTv = recommender.readItemCache(`tv_${tvmazeId}`);
+      imdbId = showImdb || (recTv && recTv.imdbId) || null;
+    } else if (!imdbId && kind === 'movie' && tmdbId) {
+      const recMv = recommender.readItemCache(`tmdb_movie_${tmdbId}`) || recommender.readItemCache(`mv_${tmdbId}`);
+      imdbId = (recMv && recMv.imdbId) || null;
+    }
+
+    const dossier = await wiki.getWikiDossier({ kind, name, year, imdbId, qid, wikiTitle });
+    return sendJson(res, 200, dossier, req);
   }
 
   if (pathname === '/api/galaxy/search' && method === 'GET') {

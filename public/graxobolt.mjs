@@ -32,6 +32,7 @@ function readThemePalette() {
     accent3: pick('--accent-3', '#f59e0b'),
     ok: pick('--ok', '#34d399'),
     person: new THREE.Color('#22d3ee'),
+    source: new THREE.Color('#f472b6'),
     text: pick('--text', '#eef0fa'),
   };
 }
@@ -277,7 +278,7 @@ export function mountGraxobolt(container, callbacks) {
       <div class="gb-inspector" id="gbInspector" hidden></div>
       <div class="gb-loading" id="gbLoading" hidden>
         <span class="spinner" aria-hidden="true"></span>
-        <span id="gbLoadingText">Generating 3D constellation…</span>
+        <span id="gbLoadingText">Generating constellation…</span>
       </div>
     </div>`;
 
@@ -298,7 +299,7 @@ export function mountGraxobolt(container, callbacks) {
   } catch (err) {
     webglFailed = true;
     loadingBox.hidden = false;
-    loadingBox.innerHTML = `<span>WebGL 3D context unavailable on this browser (${esc(err.message)}).</span>`;
+    loadingBox.innerHTML = `<span>WebGL context unavailable on this browser (${esc(err.message)}).</span>`;
     return {
       isReady: () => false,
       pause: () => {},
@@ -392,6 +393,7 @@ export function mountGraxobolt(container, callbacks) {
   const GEO_STAR = new THREE.SphereGeometry(1.75, 18, 14);
   const GEO_PERSON = new THREE.OctahedronGeometry(1.6, 0);
   const GEO_THEME = new THREE.IcosahedronGeometry(1.9, 0);
+  const GEO_SOURCE = new THREE.DodecahedronGeometry(1.75, 0);
   const GEO_RING = new THREE.RingGeometry(2.35, 2.85, 32);
 
   // Selection shockwave + target reticle ring
@@ -430,6 +432,9 @@ export function mountGraxobolt(container, callbacks) {
   let autoDive = true;
   let povMode = true;
   let diveToken = 0;
+  let wikiToken = 0;
+  let wikiAbort = null;
+  const wikiMem = new Map();
   let currentMode = 'taste';
   let paused = false;
   let rafId = 0;
@@ -449,6 +454,7 @@ export function mountGraxobolt(container, callbacks) {
   };
 
   const keysDown = new Set();
+  let pinchUsedInGesture = false;
   const labelPool = [];
   for (let i = 0; i < 28; i++) {
     const el = document.createElement('button');
@@ -457,6 +463,7 @@ export function mountGraxobolt(container, callbacks) {
     el.style.display = 'none';
     el.addEventListener('click', (e) => {
       e.stopPropagation();
+      if (pinchUsedInGesture) return;
       const k = el.dataset.key;
       if (k) handleNodeClick(k);
     });
@@ -486,6 +493,7 @@ export function mountGraxobolt(container, callbacks) {
   function nodeColor(nd) {
     if (nd.seed) return palette.accent3.clone();
     if (nd.hidden) return new THREE.Color('#64748b');
+    if (nd.kind === 'source') return palette.source.clone();
     if (nd.kind === 'person') return palette.person.clone();
     if (nd.kind === 'theme') return palette.accent.clone();
     if (nd.favorite || nd.loved) return palette.accent3.clone();
@@ -532,7 +540,7 @@ export function mountGraxobolt(container, callbacks) {
 
   function addNodeMesh(nd, startTiny = false) {
     const col = nodeColor(nd);
-    const geo = nd.kind === 'person' ? GEO_PERSON : nd.kind === 'theme' ? GEO_THEME : GEO_STAR;
+    const geo = nd.kind === 'person' ? GEO_PERSON : nd.kind === 'theme' ? GEO_THEME : nd.kind === 'source' ? GEO_SOURCE : GEO_STAR;
     const mat = new THREE.MeshStandardMaterial({
       color: col,
       emissive: col,
@@ -559,7 +567,7 @@ export function mountGraxobolt(container, callbacks) {
       depthWrite: false,
     });
     const aura = new THREE.Sprite(auraMat);
-    const auraScale = nd.kind === 'theme' ? 11 : nd.seed ? 13 : 8.5;
+    const auraScale = nd.kind === 'theme' ? 11 : nd.kind === 'source' ? 10.5 : nd.seed ? 13 : 8.5;
     aura.scale.set(auraScale, auraScale, 1);
     mesh.add(aura);
     mesh.userData.aura = aura;
@@ -677,12 +685,21 @@ export function mountGraxobolt(container, callbacks) {
     const baseC = palette.accent;
     const hiPerson = palette.person;
     const hiGold = palette.accent3;
+    const hiSource = palette.source;
 
     for (let i = 0; i < graph._validEdges.length; i++) {
       const e = graph._validEdges[i];
       const active = focus && (e.source === focus || e.target === focus);
       const dimmed = Boolean(focus && !active);
-      const c = active ? (e.rel === 'creator' ? hiGold : hiPerson) : baseC;
+      const relColor =
+        e.rel === 'creator'
+          ? hiGold
+          : e.rel === 'adapted' || e.rel === 'author'
+          ? hiSource
+          : e.rel === 'composer' || e.rel === 'cast' || e.rel === 'cowatch'
+          ? hiPerson
+          : baseC;
+      const c = active ? relColor : e.rel === 'adapted' || e.rel === 'author' ? hiSource : baseC;
       const mul = active ? 1.25 : dimmed ? 0.14 : 0.34;
       cols[i * 6] = c.r * mul;
       cols[i * 6 + 1] = c.g * mul;
@@ -751,6 +768,7 @@ export function mountGraxobolt(container, callbacks) {
       selectNode(seedNode.key, false);
       resetCamera(false, true);
     } else {
+      wikiAbort?.abort();
       selectedKey = null;
       inspector.hidden = true;
       resetCamera(false, false);
@@ -793,6 +811,8 @@ export function mountGraxobolt(container, callbacks) {
       seedId: nd.tvmazeId || nd.tmdbId || nd.tvmazePersonId || null,
       seedTmdbId: nd.tmdbId || nd.tmdbPersonId || null,
       seedKeywordId: nd.tmdbKeywordId || null,
+      seedQid: nd.qid || null,
+      seedWikiTitle: nd.wikiTitle || null,
       seedName: nd.name,
       imdbId: nd.imdbId || null,
     };
@@ -861,11 +881,11 @@ export function mountGraxobolt(container, callbacks) {
     }
   }
 
-  async function expandSelectedNode(key) {
+  async function expandSelectedNode(key, { includeWiki = false } = {}) {
     const nd = graph.byKey.get(key);
     if (!nd) return;
     const expandBtn = inspector.querySelector('#gbExpandBtn');
-    if (expandBtn) {
+    if (expandBtn && !includeWiki) {
       expandBtn.disabled = true;
       expandBtn.textContent = 'Expanding…';
     }
@@ -873,6 +893,7 @@ export function mountGraxobolt(container, callbacks) {
       const res = await api('/api/galaxy/expand', {
         method: 'POST',
         body: JSON.stringify({
+          includeWiki,
           node: {
             key: nd.key,
             kind: nd.kind,
@@ -880,10 +901,13 @@ export function mountGraxobolt(container, callbacks) {
             tvmazeId: nd.tvmazeId,
             tmdbId: nd.tmdbId,
             imdbId: nd.imdbId,
+            qid: nd.qid,
+            wikiTitle: nd.wikiTitle,
             tvmazePersonId: nd.tvmazePersonId,
             tmdbPersonId: nd.tmdbPersonId,
             tmdbKeywordId: nd.tmdbKeywordId,
             premiered: nd.premiered,
+            role: nd.role,
             x: nd.x,
             y: nd.y,
             z: nd.z,
@@ -907,11 +931,11 @@ export function mountGraxobolt(container, callbacks) {
       for (const cl of res.clusters || []) addNebulaCloud(cl, graph.clusters.length + 1);
       rebuildEdgesAndPulses();
       fireLightningBolts(nd, added);
-      triggerShockwave(nd, palette.person);
+      triggerShockwave(nd, includeWiki ? palette.source : palette.person);
       warpCameraTo(new THREE.Vector3(nd.x, nd.y, nd.z), 96, false);
       sound.playBoltExpand();
       updateStatsPill();
-      breadcrumbs = breadcrumbs.filter((b) => b.key !== nd.key).concat([{ label: nd.name, key: nd.key, kind: nd.kind }]).slice(-6);
+      breadcrumbs = breadcrumbs.filter((b) => b.key !== nd.key).concat([{ label: nd.name, key: nd.key, kind: nd.kind, seed: seedParamsForNode(nd) }]).slice(-6);
       renderBreadcrumbs();
       toast(`⚡ Bloomed +${added.length} new stars from ${nd.name}`, 'ok');
     } catch (err) {
@@ -921,14 +945,159 @@ export function mountGraxobolt(container, callbacks) {
     }
   }
 
+  function renderWikiLore(nd, box, dossier) {
+    if (!box) return;
+    if (!dossier || !dossier.found) {
+      box.innerHTML = `<div class="gb-wiki-empty">W No matching Wikipedia lore cached</div>`;
+      return;
+    }
+    if (dossier.qid && !nd.qid) nd.qid = dossier.qid;
+    if (dossier.wikiTitle && !nd.wikiTitle) nd.wikiTitle = dossier.wikiTitle;
+    if (dossier.thumbnail && !nd.poster && !nd.image) {
+      nd.image = dossier.thumbnail;
+      const ph = inspector.querySelector('#gbInsPh');
+      if (ph) {
+        const img = document.createElement('img');
+        img.className = 'gb-ins-img';
+        img.src = dossier.thumbnail;
+        img.alt = '';
+        ph.replaceWith(img);
+      }
+    }
+
+    const lifeStr = dossier.birthYear ? `${dossier.birthYear}${dossier.deathYear ? `–${dossier.deathYear}` : '–present'}` : '';
+    const facts = [];
+    if (nd.kind === 'person' && (lifeStr || dossier.birthPlace || (dossier.occupations && dossier.occupations.length))) {
+      facts.push([lifeStr, dossier.birthPlace, (dossier.occupations || []).slice(0, 2).join(', ')].filter(Boolean).join(' · '));
+    }
+    if (nd.kind === 'source' && (dossier.pubYear || (dossier.sourceGenres && dossier.sourceGenres.length))) {
+      facts.push([dossier.pubYear ? `Published ${dossier.pubYear}` : '', (dossier.sourceGenres || []).slice(0, 2).join(', ')].filter(Boolean).join(' · '));
+    }
+
+    const chipBtn = (cls, icon, label, seedPayload) =>
+      `<button type="button" class="gb-wiki-chip ${cls}" data-wiki-seed='${esc(JSON.stringify(seedPayload))}'>${icon} ${esc(label)}</button>`;
+
+    const linkChips = [];
+    for (const b of (dossier.basedOn || []).slice(0, 3)) {
+      linkChips.push(chipBtn('source', '📖', b.name, { seedKind: 'source', seedQid: b.qid, seedName: b.name }));
+    }
+    for (const a of (dossier.authors || []).slice(0, 2)) {
+      linkChips.push(chipBtn('person', '✍️', a.name, { seedKind: 'person', seedQid: a.qid, seedName: a.name }));
+    }
+    for (const c of (dossier.composers || []).slice(0, 2)) {
+      linkChips.push(chipBtn('person', '🎵', c.name, { seedKind: 'person', seedQid: c.qid, seedName: c.name }));
+    }
+
+    const hasGraphableLinks =
+      (nd.kind === 'show' || nd.kind === 'movie') &&
+      ((dossier.basedOn || []).some((b) => !graph.byKey.has(b.qid ? `source:${b.qid}` : `source:${b.name.toLowerCase()}`)) ||
+        (dossier.authors || []).some((a) => !graph.byKey.has(`person:${a.name.toLowerCase()}`)) ||
+        (dossier.composers || []).some((c) => !graph.byKey.has(`person:${c.name.toLowerCase()}`)));
+
+    const awardsHtml = (dossier.awards || []).length
+      ? `<div class="gb-wiki-row"><span class="gb-wiki-lbl">Awards</span><div class="gb-wiki-tags">${dossier.awards
+          .slice(0, 3)
+          .map((a) => `<span class="gb-wiki-tag award" title="${esc(a)}">🏆 ${esc(a)}</span>`)
+          .join('')}${dossier.awardsTotal > 3 ? `<span class="gb-wiki-tag">+${dossier.awardsTotal - 3}</span>` : ''}</div></div>`
+      : '';
+    const locParts = [
+      ...(dossier.filmingLocations || []).slice(0, 2).map((l) => `📍 ${l}`),
+      ...(dossier.locations || []).slice(0, 2).map((l) => `🌍 ${l}`),
+      ...(dossier.movements || []).slice(0, 1).map((m) => `🎞️ ${m}`),
+    ];
+    const locHtml = locParts.length
+      ? `<div class="gb-wiki-row"><span class="gb-wiki-lbl">Context</span><div class="gb-wiki-tags">${locParts
+          .map((t) => `<span class="gb-wiki-tag">${esc(t)}</span>`)
+          .join('')}</div></div>`
+      : '';
+
+    const extText = dossier.extract || dossier.description || '';
+    const showExt = extText && (!nd.summary || nd.summary.trim() !== extText.trim());
+    const longExt = Boolean(showExt && extText.length > 175);
+
+    box.innerHTML = `
+      <div class="gb-wiki-head">
+        <span class="gb-wiki-mark" aria-hidden="true">W</span>
+        ${dossier.wikiUrl ? `<a class="gb-wiki-link" href="${esc(dossier.wikiUrl)}" target="_blank" rel="noopener noreferrer">${esc(dossier.wikiTitle || nd.name)} ↗</a>` : `<span class="gb-wiki-link">${esc(dossier.wikiTitle || nd.name)}</span>`}
+        <span class="gb-wiki-src">${dossier.fromCache ? 'Cached' : 'Wikipedia'}</span>
+      </div>
+      ${facts.length ? `<div class="gb-wiki-sub">${esc(facts.join(' · '))}</div>` : ''}
+      ${showExt ? `<p class="gb-wiki-ext${longExt ? ' clamped' : ''}" id="gbWikiExt">${esc(extText)}</p>` : ''}
+      ${longExt ? `<button type="button" class="gb-wiki-more" id="gbWikiMore">Read more</button>` : ''}
+      ${linkChips.length ? `<div class="gb-wiki-row"><span class="gb-wiki-lbl">Lore Links</span><div class="gb-wiki-tags">${linkChips.join('')}</div></div>` : ''}
+      ${awardsHtml}
+      ${locHtml}
+      ${hasGraphableLinks ? `<button type="button" class="btn btn-small gb-wiki-bloom" id="gbWikiBloomBtn">🌐 +Bloom Wiki Links</button>` : ''}`;
+
+    box.querySelector('#gbWikiMore')?.addEventListener('click', (e) => {
+      const p = box.querySelector('#gbWikiExt');
+      if (!p) return;
+      const open = p.classList.toggle('clamped');
+      e.currentTarget.textContent = open ? 'Read more' : 'Show less';
+    });
+    box.querySelectorAll('[data-wiki-seed]').forEach((btn) =>
+      btn.addEventListener('click', () => {
+        try {
+          loadSeed(JSON.parse(btn.dataset.wikiSeed));
+        } catch {
+          /* ignore */
+        }
+      })
+    );
+    box.querySelector('#gbWikiBloomBtn')?.addEventListener('click', async (e) => {
+      e.currentTarget.disabled = true;
+      e.currentTarget.textContent = 'Blooming Wiki Links…';
+      await expandSelectedNode(nd.key, { includeWiki: true });
+    });
+  }
+
+  async function loadWikiForNode(nd, box) {
+    if (!nd || !box) return;
+    wikiAbort?.abort();
+    const myTok = ++wikiToken;
+    const memKey = `${nd.key}|${nd.qid || ''}|${nd.imdbId || ''}`;
+    if (wikiMem.has(memKey)) {
+      renderWikiLore(nd, box, wikiMem.get(memKey));
+      return;
+    }
+
+    wikiAbort = new AbortController();
+    box.innerHTML = `<div class="gb-wiki-loading"><span class="spinner" aria-hidden="true"></span><span>Fetching Wikipedia lore…</span></div>`;
+    try {
+      const qs = new URLSearchParams({
+        kind: nd.kind || 'show',
+        name: String(nd.name || '').replace(/\s*\(\d{4}\)$/, ''),
+        ...(nd.premiered ? { year: String(nd.premiered).slice(0, 4) } : {}),
+        ...(nd.imdbId ? { imdbId: nd.imdbId } : {}),
+        ...(nd.qid ? { qid: nd.qid } : {}),
+        ...(nd.wikiTitle ? { wikiTitle: nd.wikiTitle } : {}),
+        ...(nd.tvmazeId ? { tvmazeId: String(nd.tvmazeId) } : {}),
+        ...(nd.tmdbId ? { tmdbId: String(nd.tmdbId) } : {}),
+      });
+      const res = await api(`/api/galaxy/wiki?${qs}`, { signal: wikiAbort.signal });
+      if (myTok !== wikiToken || selectedKey !== nd.key || paused) return;
+      if (wikiMem.size >= 40) {
+        const firstKey = wikiMem.keys().next().value;
+        if (firstKey !== undefined) wikiMem.delete(firstKey);
+      }
+      wikiMem.set(memKey, res);
+      renderWikiLore(nd, box, res);
+    } catch (err) {
+      if (err && err.name === 'AbortError') return;
+      if (myTok === wikiToken && selectedKey === nd.key && box) {
+        box.innerHTML = `<div class="gb-wiki-empty">W Wikipedia lookup skipped</div>`;
+      }
+    }
+  }
+
   function renderInspector(nd) {
     inspector.hidden = false;
     const isMedia = nd.kind === 'show' || nd.kind === 'movie';
-    const typeLabel = nd.kind === 'person' ? (nd.role || 'Creator / Cast') : nd.kind === 'theme' ? 'Theme Nebula' : nd.kind === 'movie' ? 'Movie' : 'Series';
+    const typeLabel = nd.kind === 'person' ? (nd.role || 'Creator / Cast') : nd.kind === 'theme' ? 'Theme Nebula' : nd.kind === 'source' ? 'Source Work' : nd.kind === 'movie' ? 'Movie' : 'Series';
     const imgSrc = nd.poster || nd.image || null;
     inspector.innerHTML = `
       <div class="gb-ins-head">
-        ${imgSrc ? `<img class="gb-ins-img" src="${esc(imgSrc)}" alt="" />` : `<div class="gb-ins-ph">${nd.kind === 'person' ? '👤' : nd.kind === 'theme' ? '🌌' : '✦'}</div>`}
+        ${imgSrc ? `<img class="gb-ins-img" src="${esc(imgSrc)}" alt="" />` : `<div class="gb-ins-ph" id="gbInsPh">${nd.kind === 'person' ? '👤' : nd.kind === 'theme' ? '🌌' : nd.kind === 'source' ? '📖' : '✦'}</div>`}
         <div style="min-width:0;flex:1">
           <div class="gb-ins-badges">
             <span class="gb-type-tag ${esc(nd.kind)}">${esc(typeLabel)}</span>
@@ -959,20 +1128,24 @@ export function mountGraxobolt(container, callbacks) {
         isMedia
           ? `<div class="gb-ins-media-acts">
               ${!nd.tracked ? '<button type="button" class="disc-act-btn primary" data-gb-act="track">+ Calendar</button>' : ''}
+              ${nd.kind === 'show' ? `<button type="button" class="disc-act-btn dc${nd.directorsChoice ? ' on' : ''}" data-gb-act="dc" title="Virtual Release starting Today (shifts S01E01 to today)">🎬 ${nd.directorsChoice ? 'DC On' : "Director's Choice"}</button>` : ''}
               <button type="button" class="disc-act-btn love" data-gb-act="liked">${nd.loved ? '♥ Loved' : '♥ Love'}</button>
               <button type="button" class="disc-act-btn seen" data-gb-act="seen">✓ Seen</button>
               <button type="button" class="disc-act-btn nope" data-gb-act="dislike">× Hide</button>
               <button type="button" class="disc-act-btn" id="gbModalBtn">Details</button>
             </div>`
           : ''
-      }`;
+      }
+      <div class="gb-wiki-box" id="gbWikiBox"></div>`;
 
     inspector.querySelector('#gbInsClose').addEventListener('click', () => {
+      wikiAbort?.abort();
       inspector.hidden = true;
       selectedKey = null;
       reticle.visible = false;
       updateEdgeColors();
     });
+    loadWikiForNode(nd, inspector.querySelector('#gbWikiBox'));
     inspector.querySelector('#gbExpandBtn').addEventListener('click', () => expandSelectedNode(nd.key));
     inspector.querySelector('#gbCenterBtn').addEventListener('click', () => diveToNode(nd));
     inspector.querySelector('#gbModalBtn')?.addEventListener('click', () => {
@@ -994,7 +1167,10 @@ export function mountGraxobolt(container, callbacks) {
         if (ok) {
           sound.playConfirm();
           if (action === 'track') nd.tracked = true;
-          else if (action === 'liked') nd.loved = true;
+          else if (action === 'dc') {
+            nd.directorsChoice = typeof ok === 'object' && 'enabled' in ok ? Boolean(ok.enabled) : !nd.directorsChoice;
+            if (nd.directorsChoice) nd.tracked = true;
+          } else if (action === 'liked') nd.loved = true;
           else if (action === 'seen') nd.seen = true;
           else if (action === 'dislike') {
             nd.hidden = true;
@@ -1033,6 +1209,7 @@ export function mountGraxobolt(container, callbacks) {
         const curSeed = graph.nodes.find((n) => n.seed);
         if (b.mode === 'taste') loadTaste();
         else if (b.key && curSeed && curSeed.key === b.key) diveToNode(curSeed);
+        else if (b.key && graph.byKey.has(b.key)) selectNode(b.key, true);
         else if (b.seed) loadSeed(b.seed);
       })
     );
@@ -1063,7 +1240,7 @@ export function mountGraxobolt(container, callbacks) {
   }
 
   async function loadSeed(
-    { seedKind = 'show', seedId = null, seedTmdbId = null, seedKeywordId = null, seedName = '', imdbId = null } = {},
+    { seedKind = 'show', seedId = null, seedTmdbId = null, seedKeywordId = null, seedQid = null, seedWikiTitle = null, seedName = '', imdbId = null } = {},
     { minPlungeMs = 0, token = null } = {}
   ) {
     const myToken = token ?? ++diveToken;
@@ -1078,6 +1255,8 @@ export function mountGraxobolt(container, callbacks) {
         ...(seedId ? { seedId: String(seedId) } : {}),
         ...(seedTmdbId ? { seedTmdbId: String(seedTmdbId) } : {}),
         ...(seedKeywordId ? { seedKeywordId: String(seedKeywordId) } : {}),
+        ...(seedQid ? { seedQid } : {}),
+        ...(seedWikiTitle ? { seedWikiTitle } : {}),
         ...(seedName ? { seedName } : {}),
         ...(imdbId ? { imdbId } : {}),
       });
@@ -1089,7 +1268,7 @@ export function mountGraxobolt(container, callbacks) {
       setGraphData(data, {
         label: data.title || seedName,
         key: data.seedKey,
-        seed: { seedKind, seedId, seedTmdbId, seedKeywordId, seedName, imdbId },
+        seed: { seedKind, seedId, seedTmdbId, seedKeywordId, seedQid, seedWikiTitle, seedName, imdbId },
       });
     } catch (err) {
       if (myToken === diveToken) toast(err.message, 'err');
@@ -1099,13 +1278,27 @@ export function mountGraxobolt(container, callbacks) {
     }
   }
 
-  // ---------- Pointer / Raycast / 6DoF Drag / Pinch-Touch / WASD Controls ----------
+  // ---------- Pointer / Raycast / 6DoF Drag / Mobile Pinch-Zoom / WASD Controls ----------
   const raycaster = new THREE.Raycaster();
   const pointer = new THREE.Vector2();
-  let dragMode = null; // 'rotate' | 'roll' | null
-  let dragMoved = 0;
-  let lastPtr = { x: 0, y: 0 };
-  let pinchDist = 0;
+  const activePointers = new Map(); // pointerId -> { x, y }
+  let singleDrag = null; // { id, mode, lastX, lastY, moved }
+  let gesturePinchDist = 0;
+  let touchPinchDist = 0;
+
+  function isInteractiveUi(target) {
+    return Boolean(target && target.closest('.gb-hud-top, #gbBreadcrumbs, #gbInspector, #gbLoading, .gb-hud-controls'));
+  }
+
+  function applyPinchDolly(deltaPx) {
+    if (!deltaPx || !Number.isFinite(deltaPx)) return;
+    camState.warpTargetPos = null;
+    SCRATCH_V1.set(0, 0, -1).applyQuaternion(camera.quaternion);
+    const minDim = Math.max(240, Math.min(stage.clientWidth || 390, stage.clientHeight || 600));
+    const scale = Math.max(0.45, Math.min(1.4, 340 / minDim));
+    camera.position.addScaledVector(SCRATCH_V1, deltaPx * scale * 0.55);
+    camState.vel.addScaledVector(SCRATCH_V1, deltaPx * scale * 1.45);
+  }
 
   function pickAtPointer(clientX, clientY) {
     const rect = canvas.getBoundingClientRect();
@@ -1118,29 +1311,60 @@ export function mountGraxobolt(container, callbacks) {
   }
 
   canvas.addEventListener('contextmenu', (e) => e.preventDefault());
-  canvas.addEventListener('pointerdown', (e) => {
+  stage.addEventListener('pointerdown', (e) => {
+    if (paused || isInteractiveUi(e.target)) return;
     sound.ensureCtx();
-    dragMode = e.button === 2 || e.ctrlKey ? 'roll' : 'rotate';
-    dragMoved = 0;
-    lastPtr = { x: e.clientX, y: e.clientY };
     camState.warpTargetPos = null; // Manual grip cancels autopilot cleanly
-  });
-  window.addEventListener('pointermove', (e) => {
-    if (paused) return;
-    if (dragMode) {
-      const dx = e.clientX - lastPtr.x;
-      const dy = e.clientY - lastPtr.y;
-      dragMoved += Math.abs(dx) + Math.abs(dy);
-      lastPtr = { x: e.clientX, y: e.clientY };
-      if (dragMode === 'roll') {
-        camState.targetRoll += dx * 0.0045;
-      } else {
-        camState.targetYaw += dx * 0.0042;
-        camState.targetPitch = Math.max(-1.45, Math.min(1.45, camState.targetPitch + dy * 0.0042));
-      }
-      return;
-    }
+    activePointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
     if (e.target === canvas) {
+      try { canvas.setPointerCapture(e.pointerId); } catch {}
+    }
+
+    if (activePointers.size === 1) {
+      pinchUsedInGesture = false;
+      gesturePinchDist = 0;
+      singleDrag = {
+        id: e.pointerId,
+        mode: e.button === 2 || e.ctrlKey ? 'roll' : 'rotate',
+        lastX: e.clientX,
+        lastY: e.clientY,
+        moved: 0,
+      };
+    } else if (activePointers.size >= 2) {
+      singleDrag = null;
+      pinchUsedInGesture = true;
+      const pts = [...activePointers.values()];
+      gesturePinchDist = Math.hypot(pts[1].x - pts[0].x, pts[1].y - pts[0].y);
+    }
+  });
+
+  const onPointerMove = (e) => {
+    if (paused) return;
+    if (activePointers.has(e.pointerId)) {
+      activePointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
+      if (activePointers.size >= 2) {
+        const pts = [...activePointers.values()];
+        const nextDist = Math.hypot(pts[1].x - pts[0].x, pts[1].y - pts[0].y);
+        if (gesturePinchDist > 0) applyPinchDolly(nextDist - gesturePinchDist);
+        gesturePinchDist = nextDist;
+        return;
+      }
+      if (singleDrag && singleDrag.id === e.pointerId) {
+        const dx = e.clientX - singleDrag.lastX;
+        const dy = e.clientY - singleDrag.lastY;
+        singleDrag.moved += Math.abs(dx) + Math.abs(dy);
+        singleDrag.lastX = e.clientX;
+        singleDrag.lastY = e.clientY;
+        if (singleDrag.mode === 'roll') {
+          camState.targetRoll += dx * 0.0045;
+        } else {
+          camState.targetYaw += dx * 0.0042;
+          camState.targetPitch = Math.max(-1.45, Math.min(1.45, camState.targetPitch + dy * 0.0042));
+        }
+        return;
+      }
+    }
+    if (activePointers.size === 0 && e.target === canvas && e.pointerType !== 'touch') {
       const hitKey = pickAtPointer(e.clientX, e.clientY);
       if (hitKey !== hoveredKey) {
         hoveredKey = hitKey;
@@ -1152,16 +1376,39 @@ export function mountGraxobolt(container, callbacks) {
         }
       }
     }
-  });
-  window.addEventListener('pointerup', (e) => {
-    if (paused || !dragMode) return;
-    const wasClick = dragMoved < 6 && e.target === canvas;
-    dragMode = null;
-    if (wasClick) {
+  };
+
+  const onPointerEnd = (e) => {
+    if (!activePointers.has(e.pointerId)) return;
+    const endedDrag = singleDrag && singleDrag.id === e.pointerId ? singleDrag : null;
+    activePointers.delete(e.pointerId);
+    try { canvas.releasePointerCapture(e.pointerId); } catch {}
+
+    if (activePointers.size >= 2) {
+      const pts = [...activePointers.values()];
+      gesturePinchDist = Math.hypot(pts[1].x - pts[0].x, pts[1].y - pts[0].y);
+      singleDrag = null;
+      return;
+    }
+    if (activePointers.size === 1) {
+      const [remId, remPt] = activePointers.entries().next().value;
+      gesturePinchDist = 0;
+      singleDrag = { id: remId, mode: 'rotate', lastX: remPt.x, lastY: remPt.y, moved: 999 };
+      return;
+    }
+
+    singleDrag = null;
+    gesturePinchDist = 0;
+    if (!paused && e.type === 'pointerup' && !pinchUsedInGesture && endedDrag && endedDrag.moved < 6 && e.target === canvas) {
       const k = pickAtPointer(e.clientX, e.clientY);
       if (k) handleNodeClick(k);
     }
-  });
+  };
+
+  window.addEventListener('pointermove', onPointerMove);
+  window.addEventListener('pointerup', onPointerEnd);
+  window.addEventListener('pointercancel', onPointerEnd);
+
   canvas.addEventListener('dblclick', (e) => {
     if (autoDive) return;
     const k = pickAtPointer(e.clientX, e.clientY);
@@ -1182,34 +1429,43 @@ export function mountGraxobolt(container, callbacks) {
     { passive: false }
   );
 
-  // Touch pinch-to-zoom cleanly for mobile/tablet
-  canvas.addEventListener(
+  // Safari gesture + non-pointer multi-touch pinch fallback
+  stage.addEventListener(
     'touchstart',
     (e) => {
-      if (e.touches.length === 2) {
+      if (e.touches.length >= 2 && !isInteractiveUi(e.target)) {
+        e.preventDefault();
+        pinchUsedInGesture = true;
         const dx = e.touches[0].clientX - e.touches[1].clientX;
         const dy = e.touches[0].clientY - e.touches[1].clientY;
-        pinchDist = Math.hypot(dx, dy);
+        touchPinchDist = Math.hypot(dx, dy);
       }
     },
-    { passive: true }
+    { passive: false }
   );
-  canvas.addEventListener(
+  stage.addEventListener(
     'touchmove',
     (e) => {
-      if (e.touches.length === 2 && pinchDist > 0) {
-        const dx = e.touches[0].clientX - e.touches[1].clientX;
-        const dy = e.touches[0].clientY - e.touches[1].clientY;
-        const nextDist = Math.hypot(dx, dy);
-        const delta = nextDist - pinchDist;
-        pinchDist = nextDist;
-        camState.warpTargetPos = null;
-        SCRATCH_V1.set(0, 0, -1).applyQuaternion(camera.quaternion);
-        camState.vel.addScaledVector(SCRATCH_V1, delta * 0.65);
+      if (e.touches.length >= 2 && !isInteractiveUi(e.target)) {
+        e.preventDefault();
+        if (activePointers.size < 2 && touchPinchDist > 0) {
+          const dx = e.touches[0].clientX - e.touches[1].clientX;
+          const dy = e.touches[0].clientY - e.touches[1].clientY;
+          const nextDist = Math.hypot(dx, dy);
+          applyPinchDolly(nextDist - touchPinchDist);
+          touchPinchDist = nextDist;
+        }
       }
     },
-    { passive: true }
+    { passive: false }
   );
+  const resetTouchPinch = (e) => {
+    if (e.touches.length < 2) touchPinchDist = 0;
+  };
+  stage.addEventListener('touchend', resetTouchPinch, { passive: true });
+  stage.addEventListener('touchcancel', resetTouchPinch, { passive: true });
+  stage.addEventListener('gesturestart', (e) => e.preventDefault());
+  stage.addEventListener('gesturechange', (e) => e.preventDefault());
 
   function resetCamera(playAudio = true, snapApproach = false) {
     camState.targetRoll = 0;
@@ -1373,7 +1629,7 @@ export function mountGraxobolt(container, callbacks) {
       camState.vel.multiplyScalar(Math.pow(0.015, dt));
     }
 
-    if (autoOrbit && !dragMode && !manualThrust && !camState.warpTargetPos) {
+    if (autoOrbit && activePointers.size === 0 && !touchPinchDist && !manualThrust && !camState.warpTargetPos) {
       camState.targetYaw += dt * 0.22;
       const offset = SCRATCH_V1.subVectors(camera.position, camState.orbitCenter);
       offset.applyAxisAngle(SCRATCH_V3.set(0, 1, 0), dt * 0.22);
@@ -1422,7 +1678,7 @@ export function mountGraxobolt(container, callbacks) {
         if (ud.aura) ud.aura.material.opacity = 0.56 * visFade;
         if (ud.ring) ud.ring.material.opacity = 0.55 * visFade;
       }
-      if (nd.kind === 'person' || nd.kind === 'theme') {
+      if (nd.kind === 'person' || nd.kind === 'theme' || nd.kind === 'source') {
         m.rotation.y += dt * 0.65;
         m.rotation.x += dt * 0.25;
       }
@@ -1525,6 +1781,7 @@ export function mountGraxobolt(container, callbacks) {
     isReady: () => !webglFailed,
     pause() {
       paused = true;
+      wikiAbort?.abort();
       cancelAnimationFrame(rafId);
       sound.suspend();
     },
@@ -1554,11 +1811,15 @@ export function mountGraxobolt(container, callbacks) {
     },
     destroy() {
       paused = true;
+      wikiAbort?.abort();
       cancelAnimationFrame(rafId);
       sound.suspend();
       ro.disconnect();
       window.removeEventListener('keydown', onKeyDown);
       window.removeEventListener('keyup', onKeyUp);
+      window.removeEventListener('pointermove', onPointerMove);
+      window.removeEventListener('pointerup', onPointerEnd);
+      window.removeEventListener('pointercancel', onPointerEnd);
       clearSceneGraph();
       renderer.dispose();
     },

@@ -23,31 +23,37 @@ Switch to the dedicated **Discover** tab (`D` shortcut) to explore personalized 
 
 ---
 
-## Graxobolt (3D Neural Content Galaxy)
+## Graxobolt (Neural Content Galaxy)
 
-Press **`G`** (or switch to the **Graxobolt** tab) to explore movies, series, cast, showrunners, and story themes inside a real-time 3D WebGL2 universe rendered at up to 60 FPS using bundled Three.js (`public/vendor/three/`) — still with zero `npm install` runtime dependencies:
+Press **`G`** (or switch to the **Graxobolt** tab) to explore movies, series, cast, showrunners, adapted source books, and story themes inside a real-time WebGL2 universe rendered at up to 60 FPS using bundled Three.js (`public/vendor/three/`) — still with zero `npm install` runtime dependencies:
 
-- **What Graxobolt Maps ([`lib/galaxy.js`](lib/galaxy.js) & [`public/graxobolt.mjs`](public/graxobolt.mjs))**:
+- **What Graxobolt Maps ([`lib/galaxy.js`](lib/galaxy.js), [`lib/wiki.js`](lib/wiki.js) & [`public/graxobolt.mjs`](public/graxobolt.mjs))**:
   - **Spheres**: TV shows & movies (emerald orbital ring for watched/seen titles, gold orbital ring for favorites and active seeds).
   - **Cyan Octahedron Crystals**: Creators, showrunners, directors, and cast linking cross-credited series and films.
   - **Violet Icosahedron Nebulas**: Narrative story themes & TMDB keywords clustering related titles together.
+  - **Pink Dodecahedron Crystals (`source`)**: Source novels, comics, and books discovered via Wikipedia/Wikidata (`based on`) when blooming lore.
   - **Volumetric Nebulas, Synapses & VFX**: Theme-tinted gas clouds, drifting signal pulses along edges, shockwave rings, lightning-arc expansions, starfield dust streaks reacting to warp velocity, and a procedural **Web Audio** sci-fi soundscape (hover tones, warp whooshes, lightning chords — muteable anytime).
 - **Multiple Entry Points**:
   - **My Universe (Taste Nebula):** Maps your tracked shows/movies, top Discover matches, shared creators/cast, and dominant theme clusters. Enable **Dark Matter** to reveal your hidden items dimly on the outer rim.
   - **Live Galaxy Search (`/api/galaxy/search`)**: Warp directly to any show, movie, actor, or creator.
-  - **Direct `⚡ 3D` Launches**: Jump straight into a show or movie's constellation from any Episode Modal, Discover Card, or Calendar Search result.
+  - **Optional `⚡ Explore in Graxobolt` Launches**: Jump straight into a show, movie, person, or source-book constellation from Episode/Discover Modals (or via the inline modal Spotlight panel), Search results, or Discover cards — without pulling you out of detail modals automatically.
+- **On-Demand Wikipedia & Wikidata Lore (`/api/galaxy/wiki`, [`lib/wiki.js`](lib/wiki.js))**:
+  - Zero background polling or hover scraping — dossiers fetch strictly on demand when opening modals or selecting/expanding nodes (`PoliteLimiter` request spacing, `120`-entry memory LRU cache, and bounded disk cache in `data/wiki-cache/` with 30-day positive / 7-day negative TTLs, capped at 700 files).
+  - Surfaces biographies, portraits, prestige awards, filming/setting locations, adaptations (`Adapted from …`), **`🌐 +Bloom Wiki Links`** expansion into the galaxy, and explicit **`Is this true? ~XX%`** confidence pills whenever a match is heuristic without a shared IMDb/TMDB/Wikidata QID.
 - **Auto-Dive & First-Person Seed POV**:
-  - With **⚡ Auto-Dive** enabled (default), clicking any show, movie, person, or theme nebula launches a forward warp plunge and automatically **re-seeds `/api/galaxy`** centered on that choice — placing the camera inside its **first-person Seed POV** looking outward down a fan of connected destinations.
-  - Press **`V`** (or click **POV (V)**) anytime inside a seeded constellation to pull out into **Constellation Overview** and back; toggle **⚡ Auto-Dive** off to inspect stars on single-click, bloom **⚡ Expand (+1 Hop)** lightning branches inline (`/api/galaxy/expand`), or double-click to dive. Use the breadcrumb trail to jump back to earlier stars in your journey.
-- **6DoF Navigation & Inline Calendar Actions**:
-  - Drag (`pointer`) pulls the starfield view naturally across `X`/`Y`, **Right-Drag** (or `Ctrl`-Drag) rolls `Z`, scroll/pinch zooms, `WASD` + `Q/E` + `Shift` fly with warp boost, `Space` toggles **Orbit**, and `R` / **Reset** re-centers the camera.
-  - Every Inspector card lets you act directly without leaving 3D space: **`+ Calendar`**, **`♥ Love`**, **`✓ Seen`**, **`× Hide`**, and **`Details`**.
+  - With **⚡ Auto-Dive** enabled (default), clicking any show, movie, person, source work, or theme nebula launches a forward warp plunge and automatically **re-seeds `/api/galaxy`** centered on that choice — placing the camera inside its **first-person Seed POV** looking outward down a fan of connected destinations.
+  - Press **`V`** (or click **POV (V)**) anytime inside a seeded constellation to pull out into **Constellation Overview** and back; toggle **⚡ Auto-Dive** off to inspect stars on single-click, bloom **⚡ Expand (+1 Hop)** or **🌐 +Bloom Wiki Links** branches inline (`/api/galaxy/expand`), or double-click to dive. Use the breadcrumb trail to jump back to earlier stars in your journey.
+- **Desktop 6DoF & Mobile Touch Controls**:
+  - Drag (`pointer`) or swipe with one finger to rotate the starfield view naturally across `X`/`Y`, **Right-Drag** (or `Ctrl`-Drag) to roll `Z`, pinch with two fingers on touchscreens or scroll the wheel to zoom cleanly along your view vector (with `touch-action: none` on the stage, canvas, and floating label pills), use `WASD` + `Q/E` + `Shift` to fly with warp boost, `Space` to toggle **Orbit**, and `R` / **Reset** to re-center the camera.
+  - Every Inspector card lets you act directly without leaving Graxobolt: **`+ Calendar`**, **`♥ Love`**, **`✓ Seen`**, **`× Hide`**, **`🎬 DC`** (Director's Choice virtual re-run), and **`Details`**.
 
 ---
 
 ## Calendar & Home-Theater Features
 
 - **Five Calendar Views + Month Picker**: Switch via the icon view bar between **Day** (open episode/movie descriptions and per-episode checkboxes), **Cards**, **Compact**, **Month** (dense show names & event labels), and **Up Next** (rolling **14-day window** `[today .. today + 13]` on the current week).
+- **Director's Choice Virtual Premieres (`C` Shortcut)**: Replay older or completed TV series directly in your live calendar (`/api/shows/:id/directors-choice`) by shifting `S01E01` onto today's (or any chosen anchor) date while keeping the rest of the episode cadence intact, annotated with original premiere years (`Orig YYYY`), filterable via the **`Director's Choice`** pill (`C`), and included in `.ics` feeds.
+- **Rich Cast, Crew Portraits & Inline Spotlight Modals (`/api/item/rich`)**: Opening any calendar episode/movie or Discover card loads Actors & Crew grids with profile portraits backfilled from TVmaze, TMDB, and Wikidata/Wikipedia alongside awards, filming/setting locations, and formatted inline Spotlight dossiers (with click-to-inspect bio cards and an optional **`⚡ Explore in Graxobolt`** button).
 - **Episode & Movie Check-Offs (`data/watched.json`)**: Toggle watched/grabbed status per card, per individual episode in Day view or the Episode Modal, and track partial multi-episode progress (`1/2 ✓`). Toggle **Hide seen** (`W` shortcut) to keep only unwatched episodes and movies in view without touching your Hidden list.
 - **Sync Activity Digest (`data/digest.json`)**: Displays a dismissible summary banner whenever automatic refreshes add new TV shows/movies or detect upcoming TVmaze schedule changes, with expandable history inside **Settings → Sync Activity Digest**.
 - **Premiere Alerts (Browser + Webhooks)**: Optional browser notifications for today's Favorited and Interest premieres, plus once-daily webhook dispatches (`Settings → Premiere Alerts`) supporting **ntfy.sh**, **Discord**, **Slack**, and generic JSON endpoints (with a built-in **Test** button).
@@ -57,7 +63,7 @@ Press **`G`** (or switch to the **Graxobolt** tab) to explore movies, series, ca
 - **`.ics` Calendar Feed & One-Click Backups**:
   - Subscribe or download live RFC 5545 calendar events at `/api/calendar.ics` (supports `?media=shows|both|movies`, `?favorites=1`, and `?download=1`).
   - Export and restore complete portable JSON backups inside **Settings → Calendar Feed (.ics) & Backup** (preserving shows, movies, hidden items, watched state, sync rules, and Discover Taste DNA — with API keys & webhooks stripped by default unless checked).
-- **Graxobolt 3D Explorer (`G` Tab)**: Dedicated Three.js interactive neural galaxy with Auto-Dive POV re-seeding, live +1 hop expansions, inline calendar actions, and procedural Web Audio sound effects (see [Graxobolt](#graxobolt-3d-neural-content-galaxy) above).
+- **Graxobolt Explorer (`G` Tab)**: Dedicated Three.js interactive neural galaxy with Auto-Dive POV re-seeding, live +1 hop expansions, inline calendar actions, and procedural Web Audio sound effects (see [Graxobolt](#graxobolt-neural-content-galaxy) above).
 - **10 Visual Themes**: Switch anytime in **Settings** across 5 dark and 5 light themes (`Midnight`, `Grand Bistro`, `Departure Board`, `Silver Screen`, `Broadsheet`, `Blueprint`, `Swiss Atelier`, `Cyber Arcade`, `Greenhouse`, and `Comic Press`).
 - **External Search Customization**: Configure a custom `{query}` search URL template globally in Settings plus per-title custom query overrides in the detail modal.
 - **First-Start Setup & Windows Background Startup**: Includes a guided onboarding wizard on fresh installs and Windows silent login scripts (`scripts/install-startup.cmd` / `npm run startup:install`, removed via `scripts/uninstall-startup.cmd`).
@@ -70,12 +76,13 @@ Press **`G`** (or switch to the **Graxobolt** tab) to explore movies, series, ca
 | :--- | :--- |
 | `/` | Focus TVmaze & TMDB search bar |
 | `D` | Switch between **Calendar** and **Discover** tabs |
-| `G` | Open / exit **Graxobolt** 3D Galaxy tab (`1` / `2` / `3` also switch main tabs) |
+| `G` | Open / exit **Graxobolt** Galaxy tab (`1` / `2` / `3` also switch main tabs) |
 | `WASD` / `Q` `E` / `V` / `R` / `Space` | Fly (`Shift` Warp boost), Up/Down, toggle POV/Overview, Reset camera, and toggle Orbit inside **Graxobolt** |
 | `←` / `→` | Previous / next day, week, or month |
 | `T` | Jump to today / current week |
 | `F` | Toggle **Favorites** filter (Calendar tab) |
 | `W` | Toggle **Hide seen** filter (Calendar tab) |
+| `C` | Toggle **Director's Choice** virtual re-runs (Calendar tab) |
 | `M` | Open / close **Settings & Hidden** drawer |
 | `Esc` | Close modal, dropdowns, or drawer |
 
@@ -84,7 +91,7 @@ Press **`G`** (or switch to the **Graxobolt** tab) to explore movies, series, ca
 ## Project Layout
 
 - [`server.js`](server.js) — HTTP server, static UI hosting, API routes, `.ics` generator, backup export/import, and periodic sync loop
-- `lib/` — Modular zero-dependency backend (`store.js`, `tvmaze.js`, `tmdb.js`, `discovery.js`, `movies.js`, `hidden.js`, `watched.js`, `digest.js`, `alerts.js`, `recommender.js`, `galaxy.js`)
+- `lib/` — Modular zero-dependency backend (`store.js`, `tvmaze.js`, `tmdb.js`, `discovery.js`, `movies.js`, `hidden.js`, `watched.js`, `digest.js`, `alerts.js`, `recommender.js`, `galaxy.js`, `wiki.js`)
 - `public/` — Frontend (`index.html`, `styles.css`, `themes.css`, `app.js`, `graxobolt.mjs`, `vendor/three/`, `favicon.svg`) designed for desktop and mobile (`390px+`)
 - `data/` — Runtime user database, caches, Taste DNA state, and local settings (**ignored by Git via `.gitignore`**)
 

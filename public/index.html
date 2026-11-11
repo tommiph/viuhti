@@ -53,7 +53,7 @@
         <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m12 2 2.4 6.6L21 11l-6.6 2.4L12 20l-2.4-6.6L3 11l6.6-2.4Z" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/></svg>
         <span>Discover</span>
       </button>
-      <button type="button" role="tab" data-tab="graxobolt" aria-selected="false" title="Graxobolt 3D Neural Content Galaxy (G)">
+      <button type="button" role="tab" data-tab="graxobolt" aria-selected="false" title="Graxobolt Neural Content Galaxy (G)">
         <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M13 2 4 14h7l-1 8 9-12h-7l1-8Z" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/></svg>
         <span>Graxobolt</span>
       </button>
@@ -142,6 +142,11 @@
         <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m5 12 5 5 9-10" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/></svg>
         <span>Hide seen</span>
       </button>
+      <button id="dcFilterBtn" class="fav-toggle dc-toggle on" type="button" aria-pressed="true" title="Show or hide Director's Choice virtual re-runs (C)">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h16v12a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V7Zm0 0 2-4h4l-2 4m6 0 2-4h4l-2 4" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        <span>Director's Choice</span>
+        <span id="dcCount" class="fav-count">0</span>
+      </button>
       <div class="seg" id="timeSeg" role="group" aria-label="Time display">
         <button data-value="local" title="Show air dates/times converted to your timezone">My time</button>
         <button data-value="network" title="Show original network air dates/times">Network</button>
@@ -173,7 +178,7 @@
   </main>
 
   <section id="discoverView" class="discover-view" aria-live="polite" hidden></section>
-  <section id="graxoboltView" class="graxobolt-view" aria-label="Graxobolt 3D Content Galaxy" hidden></section>
+  <section id="graxoboltView" class="graxobolt-view" aria-label="Graxobolt Content Galaxy" hidden></section>
 
   <!-- Settings & Hidden drawer -->
   <div id="drawerScrim" class="scrim" hidden></div>

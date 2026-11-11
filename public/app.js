@@ -213,6 +213,7 @@
     channel: store.get('channel', ''),
     favoritesOnly: store.get('favOnly', '0') === '1',
     hideWatched: store.get('hideWatched', '0') === '1',
+    showDirectorsChoice: store.get('showDc', '1') !== '0',
     timeMode: store.get('timeMode', 'local'),
     density: VALID_DENSITIES.has(rawDensity) ? rawDensity : 'cards',
     tab: ['discover', 'graxobolt'].includes(store.get('tab', 'calendar')) ? store.get('tab', 'calendar') : 'calendar',
@@ -233,6 +234,7 @@
       interests: [],
       showHidden: false,
       hideWatched: false,
+      showDirectorsChoice: true,
       notifyBrowser: false,
       webhookUrl: '',
       style: store.get('style', 'midnight'),
@@ -277,6 +279,7 @@
       interests: [],
       showHidden: false,
       hideWatched: false,
+      showDirectorsChoice: true,
       notifyBrowser: false,
       webhookUrl: '',
       style: prevStyle || 'midnight',
@@ -286,6 +289,9 @@
     state.hideWatched = Boolean(state.settings.hideWatched);
     store.set('hideWatched', state.hideWatched ? '1' : '0');
     updateWatchedFilterUi();
+    state.showDirectorsChoice = state.settings.showDirectorsChoice !== false;
+    store.set('showDc', state.showDirectorsChoice ? '1' : '0');
+    updateDcUi();
     if (themeSaveInflight) state.settings.style = prevStyle;
     else if (state.settings.style && (alwaysApplyTheme || state.settings.style !== prevStyle)) applyTheme(state.settings.style);
   }
@@ -324,6 +330,7 @@
     $('#movieCount').textContent = movieList.filter((m) => !m.hidden).length;
     updateFavUi();
     updateWatchedFilterUi();
+    updateDcUi();
     updateHiddenUi();
     populateGenres();
     populateChannels();
@@ -399,6 +406,19 @@
     if (!btn) return;
     btn.classList.toggle('on', state.hideWatched);
     btn.setAttribute('aria-pressed', String(state.hideWatched));
+  }
+
+  function updateDcUi() {
+    let dcCount = 0;
+    for (const s of state.shows.values()) {
+      if (s.directorsChoice && s.directorsChoice.enabled && !s.hidden) dcCount++;
+    }
+    const cnt = $('#dcCount');
+    if (cnt) cnt.textContent = dcCount;
+    const btn = $('#dcFilterBtn');
+    if (!btn) return;
+    btn.classList.toggle('on', state.showDirectorsChoice);
+    btn.setAttribute('aria-pressed', String(state.showDirectorsChoice));
   }
 
   function viewRange() {
@@ -483,6 +503,7 @@
     }
     if (state.media !== 'movies') {
       for (const ep of state.episodes) {
+        if (ep.virtual && !state.showDirectorsChoice) continue;
         if (state.hideWatched && ep.watched) continue;
         const show = state.shows.get(ep.showId);
         if (!matchesCalendarFilters(show)) continue;
@@ -574,8 +595,12 @@
       return {
         primary: { text: 'Movie', short: 'Movie', cls: 'movie', title: 'Movie release' },
         isNew: Boolean(eps[0] && eps[0].isNew),
+        isDc: false,
+        dcYear: '',
       };
     }
+    const isDc = eps.some((e) => e.virtual);
+    const dcYear = (eps.find((e) => e.originYear) || {}).originYear || (g.show.directorsChoice && g.show.directorsChoice.originYear) || '';
     const premSeries = eps.some((e) => e.premiere === 'series' || (e.premiere == null && e.season === 1 && e.number === 1));
     const premSeason = eps.some((e) => e.premiere === 'season' || (e.premiere == null && e.season > 1 && e.number === 1));
     const finSeries = eps.some((e) => e.finale === 'series');
@@ -607,7 +632,16 @@
     } else if (isNew) {
       primary = { text: 'New', short: 'New', cls: 'new', title: 'New series in its debut run' };
     }
-    return { primary, isNew: !premSeries && primary?.cls !== 'new' && isNew };
+    return { primary, isNew: !premSeries && primary?.cls !== 'new' && isNew, isDc, dcYear };
+  }
+
+  function dcBadgeHtml(dcYear, asPill = false) {
+    const yr = dcYear ? `'${String(dcYear).slice(-2)}` : '';
+    const txt = yr ? `🎬 DC ${yr}` : '🎬 DC';
+    const title = `Director's Choice Virtual Release${dcYear ? ` (Orig ${dcYear})` : ''}`;
+    return asPill
+      ? `<span class="ev-pill dc" title="${esc(title)}">${esc(txt)}</span>`
+      : `<span class="ep-tag dc" title="${esc(title)}">${esc(txt)}</span>`;
   }
 
   function interestSet() {
@@ -679,7 +713,7 @@
       : multi
       ? `${eps.length} episodes`
       : first.name || 'TBA';
-    const { primary, isNew } = groupBadges(g);
+    const { primary, isNew, isDc, dcYear } = groupBadges(g);
     const interests = matchedInterests(show);
     const isPrem = Boolean(primary && (primary.cls === 'series-prem' || primary.cls === 'season-prem'));
     const aired = !isMovie && first.airstamp && Date.parse(first.airstamp) < Date.now();
@@ -687,6 +721,7 @@
     const isCompact = state.density === 'compact';
     const tlBadges = !isCompact
       ? [
+          isDc ? dcBadgeHtml(dcYear, false) : '',
           primary ? `<span class="ep-tag ${primary.cls}" title="${esc(primary.title)}">${esc(primary.text)}</span>` : '',
           isNew ? '<span class="ep-tag new" title="Brand-new release">New</span>' : '',
         ]
@@ -697,6 +732,7 @@
       ? [
           isHidden ? '<span class="hidden-pill">Hidden</span>' : '',
           w.partial ? `<span class="watch-prog">${w.done}/${w.total} ✓</span>` : '',
+          isDc ? dcBadgeHtml(dcYear, true) : '',
           primary && primary.cls !== 'movie' ? evPillHtml(primary, true) : '',
           isNew ? '<span class="ev-pill new">New</span>' : '',
         ]
@@ -754,7 +790,7 @@
       ? `${eps.length} episodes`
       : first.name || 'TBA';
     const time = isMovie ? (src.kind === 'tv' ? 'TV' : src.kind === 'physical' ? 'Disc' : 'Digital') : timeLabel(first, show);
-    const { primary, isNew } = groupBadges(g);
+    const { primary, isNew, isDc, dcYear } = groupBadges(g);
     const interests = matchedInterests(show);
     const isPrem = Boolean(primary && (primary.cls === 'series-prem' || primary.cls === 'season-prem'));
     const thumb = show.background && isMovie
@@ -776,6 +812,7 @@
               <span class="name">${esc(show.name)}</span>
               ${isHidden ? '<span class="hidden-pill">Hidden</span>' : ''}
               ${w.partial ? `<span class="watch-prog">${w.done}/${w.total} ✓</span>` : ''}
+              ${isDc ? dcBadgeHtml(dcYear, true) : ''}
               ${primary ? evPillHtml(primary, primary.cls !== 'movie') : ''}
               ${isNew ? '<span class="ev-pill new">New</span>' : ''}
               ${interests.length ? interestPillsHtml(interests, isPrem, true) : ''}
@@ -851,7 +888,7 @@
       : multi
       ? `${eps.length} episodes`
       : first.name || 'TBA';
-    const { primary, isNew } = groupBadges(g);
+    const { primary, isNew, isDc, dcYear } = groupBadges(g);
     const interests = matchedInterests(show);
     const isPrem = Boolean(primary && (primary.cls === 'series-prem' || primary.cls === 'season-prem'));
     const time = isMovie ? (src.kind === 'tv' ? 'TV Premiere' : src.kind === 'physical' ? 'Physical' : 'Streaming') : timeLabel(first, show);
@@ -859,6 +896,7 @@
     const art = artHtml(show, priority);
     const visBtn = visibilityBtnHtml(show, kind);
     const tlBadges = [
+      isDc ? dcBadgeHtml(dcYear, false) : '',
       primary ? `<span class="ep-tag ${primary.cls}" title="${esc(primary.title)}">${esc(primary.text)}</span>` : '',
       isNew ? '<span class="ep-tag new" title="Brand-new release">New</span>' : '',
     ]
@@ -936,7 +974,7 @@
     const last = eps[eps.length - 1];
     const src = sourceOf(show);
     const brand = brandColor(src.name);
-    const { primary, isNew } = groupBadges(g);
+    const { primary, isNew, isDc, dcYear } = groupBadges(g);
     const interests = matchedInterests(show);
     const isPrem = Boolean(primary && (primary.cls === 'series-prem' || primary.cls === 'season-prem'));
     const multi = !isMovie && eps.length > 1;
@@ -953,6 +991,7 @@
       `<span class="m-lbl">${esc(code)}</span>`,
       w.allDone ? '<span class="m-lbl" title="Watched">✓</span>' : w.partial ? `<span class="m-lbl">${w.done}/${w.total}</span>` : '',
       isHidden ? '<span class="hidden-pill">Hidden</span>' : '',
+      isDc ? dcBadgeHtml(dcYear, true) : '',
       primary && primary.cls !== 'movie' ? evPillHtml(primary, true) : '',
       isNew ? '<span class="ev-pill new">New</span>' : '',
       show.favorite ? '<span class="m-lbl m-lbl-fav" title="Favorite">★</span>' : '',
@@ -1023,11 +1062,12 @@
     const metaParts = [leadLabel, `${total} ${noun}${total === 1 ? '' : 's'}`];
     if (state.favoritesOnly) metaParts.push('Favorites only');
     if (state.hideWatched) metaParts.push('Unwatched only');
+    if (!state.showDirectorsChoice) metaParts.push("Director's Choice hidden");
     if (state.genre) metaParts.push(state.genre);
     if (state.channel) metaParts.push(state.channel);
     if (state.media !== 'movies') metaParts.push(state.timeMode === 'local' ? 'your local time' : 'network time');
     const clearBtn =
-      total === 0 && (state.filter !== 'all' || state.genre || state.channel || state.favoritesOnly || state.hideWatched)
+      total === 0 && (state.filter !== 'all' || state.genre || state.channel || state.favoritesOnly || state.hideWatched || !state.showDirectorsChoice)
         ? ' <button id="clearFiltersBtn" class="clear-filters" type="button">Clear filters</button>'
         : '';
     $('#weekMeta').innerHTML = esc(metaParts.join(' · ')) + clearBtn;
@@ -1048,6 +1088,7 @@
         if ($('#channelFilter')) $('#channelFilter').value = '';
         $('#channelWrap')?.classList.remove('active');
         updateFavUi();
+        if (!state.showDirectorsChoice) toggleDirectorsChoiceFilter(true);
         if (state.hideWatched) toggleHideWatched(false);
         else renderCalendar();
       });
@@ -1569,7 +1610,313 @@
 
   // ---------- Episode modal ----------
   const detailCache = new Map();
+  const richDetailCache = new Map();
+  const richSpotCache = new Map();
+  let richAbort = null;
+  let spotAbort = null;
   let modalSeq = 0;
+
+  function personInitials(name) {
+    const parts = String(name || '').trim().split(/\s+/).filter(Boolean);
+    return parts.length >= 2 ? (parts[0][0] + parts[parts.length - 1][0]).toUpperCase() : String(parts[0] || '?').slice(0, 2).toUpperCase();
+  }
+
+  function wikiTitleFromHref(url) {
+    if (!url) return null;
+    try {
+      const u = new URL(url);
+      if (!u.hostname.endsWith('wikipedia.org')) return null;
+      return decodeURIComponent(u.pathname.replace(/^\/wiki\//, '').replace(/_/g, ' ')) || null;
+    } catch {
+      return null;
+    }
+  }
+
+  function personCardHtml(p, isCast = true) {
+    const spotPayload = {
+      kind: 'person',
+      seedKind: 'person',
+      seedId: p.tvmazePersonId || null,
+      seedTmdbId: p.tmdbPersonId || null,
+      seedQid: p.qid || null,
+      wikiTitle: wikiTitleFromHref(p.wikiUrl),
+      wikiUrl: p.wikiUrl || null,
+      wikiDesc: p.wikiDesc || '',
+      image: p.image || null,
+      role: p.role || (isCast ? 'Cast' : 'Crew'),
+      seedName: p.name,
+    };
+    const imgHtml = p.image
+      ? `<img class="m-person-img" src="${esc(p.image)}" alt="${esc(p.name)}" loading="lazy" onerror="this.style.display='none';this.nextElementSibling.style.display='grid'"><span class="m-person-ph" style="display:none">${esc(personInitials(p.name))}</span>`
+      : `<span class="m-person-ph">${esc(personInitials(p.name))}</span>`;
+    return `
+      <div class="m-person-card${isCast ? ' cast' : ' crew'}" role="button" tabindex="0" data-spotlight='${esc(JSON.stringify(spotPayload))}' title="View biography &amp; details for ${esc(p.name)}">
+        <div class="m-person-ava">${imgHtml}</div>
+        <div class="m-person-info">
+          <div class="m-person-name">${esc(p.name)}</div>
+          <div class="m-person-role" title="${esc(p.wikiDesc || p.role || '')}">${esc(p.role || (isCast ? 'Cast' : 'Crew'))}</div>
+        </div>
+        ${p.wikiUrl ? `<a class="m-person-w" href="${esc(p.wikiUrl)}" target="_blank" rel="noopener noreferrer" data-stop title="Open Wikipedia article for ${esc(p.name)}">W</a>` : ''}
+      </div>`;
+  }
+
+  function renderSpotlightCard(spotBox, info, dossier, loading = false) {
+    if (!spotBox) return;
+    spotBox.hidden = false;
+    const isSource = info.seedKind === 'source';
+    const d = dossier || {};
+    const imgSrc = info.image || d.thumbnail || null;
+    const wikiUrl = d.wikiUrl || info.wikiUrl || null;
+    const lifeStr = d.birthYear ? `${d.birthYear}${d.deathYear ? `–${d.deathYear}` : '–present'}` : '';
+    const subFacts = isSource
+      ? [d.pubYear ? `Published ${d.pubYear}` : '', (d.sourceGenres || []).slice(0, 3).join(', '), (d.authors || []).map((a) => `Author: ${a.name}`).join(', ')].filter(Boolean)
+      : [d.description || info.wikiDesc, lifeStr ? `Born ${lifeStr}` : '', d.birthPlace, (d.occupations || []).slice(0, 3).join(', ')].filter(Boolean);
+    const conf = typeof d.confidence === 'number' ? d.confidence : null;
+    const confPill =
+      conf && conf > 0 && conf < 90
+        ? `<span class="m-uncertain-pill" title="Matched by name search without a shared IMDb/TMDB person ID">Is this true? ~${conf}%</span>`
+        : '';
+
+    const gbSeed = {
+      seedKind: info.seedKind,
+      ...(info.seedId ? { seedId: info.seedId } : {}),
+      ...(info.seedTmdbId ? { seedTmdbId: info.seedTmdbId } : {}),
+      ...(d.qid || info.seedQid ? { seedQid: d.qid || info.seedQid } : {}),
+      ...(d.wikiTitle || info.wikiTitle ? { seedWikiTitle: d.wikiTitle || info.wikiTitle } : {}),
+      seedName: info.seedName,
+    };
+
+    spotBox.innerHTML = `
+      <div class="m-spot-head">
+        ${
+          imgSrc
+            ? `<img class="m-spot-img" src="${esc(imgSrc)}" alt="${esc(info.seedName)}" onerror="this.style.display='none'">`
+            : `<div class="m-spot-ph">${isSource ? '📖' : esc(personInitials(info.seedName))}</div>`
+        }
+        <div class="m-spot-meta">
+          <div class="m-spot-badges">
+            <span class="gb-type-tag ${isSource ? 'source' : 'person'}">${esc(info.role || (isSource ? 'Source Work' : 'Person'))}</span>
+            ${confPill}
+          </div>
+          <h4 class="m-spot-title">${esc(info.seedName)}</h4>
+          ${subFacts.length ? `<div class="m-spot-sub">${esc(subFacts.join(' · '))}</div>` : ''}
+        </div>
+        <button type="button" class="icon-btn m-spot-close" id="mSpotCloseBtn" aria-label="Close details panel">×</button>
+      </div>
+      ${
+        loading
+          ? `<div class="m-rich-loading"><span class="spinner" aria-hidden="true"></span><span>Loading formatted Wikipedia dossier…</span></div>`
+          : d.extract
+          ? `<p class="m-spot-ext">${esc(d.extract)}</p>`
+          : `<p class="m-spot-ext muted">${d.found ? 'Matched entry on Wikidata/Wikipedia.' : 'No detailed Wikipedia biography found for this entry.'}</p>`
+      }
+      ${
+        (d.awards || []).length
+          ? `<div class="m-lore-tags">${d.awards
+              .slice(0, 4)
+              .map((a) => `<span class="m-lore-tag award" title="${esc(a)}">🏆 ${esc(a)}</span>`)
+              .join('')}${d.awardsTotal > 4 ? `<span class="m-lore-tag award">+${d.awardsTotal - 4} awards</span>` : ''}</div>`
+          : ''
+      }
+      <div class="m-spot-actions">
+        <button type="button" class="btn btn-small" id="mSpotGbBtn">⚡ Explore in Graxobolt</button>
+        ${wikiUrl ? `<a class="btn btn-small btn-ghost" href="${esc(wikiUrl)}" target="_blank" rel="noopener noreferrer">W Wikipedia ↗</a>` : ''}
+        <button type="button" class="btn btn-small btn-ghost" id="mSpotDismissBtn">Close</button>
+      </div>`;
+
+    const dismiss = () => {
+      spotAbort?.abort();
+      spotBox.hidden = true;
+      spotBox.innerHTML = '';
+      spotBox.closest('#modalRich')?.querySelectorAll('[data-spotlight].selected').forEach((n) => n.classList.remove('selected'));
+    };
+    spotBox.querySelector('#mSpotCloseBtn')?.addEventListener('click', dismiss);
+    spotBox.querySelector('#mSpotDismissBtn')?.addEventListener('click', dismiss);
+    spotBox.querySelector('#mSpotGbBtn')?.addEventListener('click', () => {
+      closeModal();
+      openGraxobolt(gbSeed);
+    });
+  }
+
+  async function openModalSpotlight(spotBox, info, seq) {
+    spotAbort?.abort();
+    const cacheKey = `${info.seedKind}|${info.seedQid || ''}|${info.wikiTitle || ''}|${info.seedName}`;
+    if (richSpotCache.has(cacheKey)) {
+      renderSpotlightCard(spotBox, info, richSpotCache.get(cacheKey), false);
+      spotBox.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+      return;
+    }
+
+    spotAbort = new AbortController();
+    renderSpotlightCard(spotBox, info, null, true);
+    spotBox.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+
+    try {
+      const qs = new URLSearchParams({
+        kind: info.seedKind === 'source' ? 'source' : 'person',
+        name: info.seedName || '',
+        ...(info.seedQid ? { qid: info.seedQid } : {}),
+        ...(info.wikiTitle ? { wikiTitle: info.wikiTitle } : {}),
+      });
+      const res = await api(`/api/galaxy/wiki?${qs}`, { signal: spotAbort.signal });
+      if (seq !== modalSeq || $('#modal').hidden || spotBox.hidden) return;
+      if (richSpotCache.size >= 40) {
+        const first = richSpotCache.keys().next().value;
+        if (first !== undefined) richSpotCache.delete(first);
+      }
+      richSpotCache.set(cacheKey, res);
+      renderSpotlightCard(spotBox, info, res, false);
+    } catch (err) {
+      if (err && err.name === 'AbortError') return;
+      if (seq === modalSeq && !spotBox.hidden) renderSpotlightCard(spotBox, info, { found: false }, false);
+    }
+  }
+
+  function renderRichModalContent(richEl, data, existingSummary = '', seq = modalSeq) {
+    if (!richEl || !data) return;
+    const cast = data.cast || [];
+    const crew = data.crew || [];
+    const wiki = data.wiki || {};
+    const studios = data.studios || [];
+    const ext = String(wiki.extract || wiki.description || '').trim();
+    const sumNorm = stripHtml(existingSummary || '').toLowerCase();
+    const showWikiExt = ext && (!sumNorm || !sumNorm.includes(ext.slice(0, 60).toLowerCase()));
+    const longWikiExt = showWikiExt && ext.length > 220;
+
+    if (!cast.length && !crew.length && !wiki.found && !studios.length && !data.tagline) {
+      richEl.hidden = true;
+      return;
+    }
+
+    const wikiTags = [
+      ...(wiki.basedOn || []).map(
+        (b) =>
+          `<button type="button" class="m-lore-chip source" data-spotlight='${esc(
+            JSON.stringify({ kind: 'source', seedKind: 'source', seedQid: b.qid, seedName: b.name, role: 'Source Work' })
+          )}' title="View details for ${esc(b.name)}">📖 Adapted from ${esc(b.name)}</button>`
+      ),
+      ...studios.slice(0, 4).map((s) => `<span class="m-lore-tag">🎬 ${esc(s)}</span>`),
+      ...(wiki.awards || []).slice(0, 5).map((a) => `<span class="m-lore-tag award" title="${esc(a)}">🏆 ${esc(a)}</span>`),
+      ...(wiki.awardsTotal > 5 ? [`<span class="m-lore-tag award">+${wiki.awardsTotal - 5} awards</span>`] : []),
+      ...(wiki.filmingLocations || []).map((l) => `<span class="m-lore-tag">📍 Filmed in ${esc(l)}</span>`),
+      ...(wiki.locations || []).map((l) => `<span class="m-lore-tag">🌍 Set in ${esc(l)}</span>`),
+      ...(wiki.movements || []).map((m) => `<span class="m-lore-tag">🎞️ ${esc(m)}</span>`),
+    ];
+
+    const titleConfPill =
+      typeof wiki.confidence === 'number' && wiki.confidence > 0 && wiki.confidence < 90
+        ? `<span class="m-uncertain-pill" title="Fuzzy Wikipedia search without IMDb ID">Is this true? ~${wiki.confidence}%</span>`
+        : '';
+
+    richEl.hidden = false;
+    richEl.innerHTML = `
+      ${data.tagline ? `<div class="m-tagline">“${esc(data.tagline)}”</div>` : ''}
+      ${
+        crew.length
+          ? `<section class="m-rich-sec">
+              <div class="m-rich-head"><h4>Creators &amp; Crew</h4><span class="muted">${crew.length} · click for bio</span></div>
+              <div class="m-people-grid crew">${crew.map((p) => personCardHtml(p, false)).join('')}</div>
+            </section>`
+          : ''
+      }
+      ${
+        cast.length
+          ? `<section class="m-rich-sec">
+              <div class="m-rich-head"><h4>Cast &amp; Actors</h4><span class="muted">${cast.length} · click for bio</span></div>
+              <div class="m-people-grid cast">${cast.map((p) => personCardHtml(p, true)).join('')}</div>
+            </section>`
+          : ''
+      }
+      <div class="m-spotlight" id="mSpotlightBox" hidden></div>
+      ${
+        wiki.found || wikiTags.length
+          ? `<section class="m-rich-sec m-wiki-card">
+              <div class="m-wiki-card-head">
+                <div class="m-wiki-brand"><span class="gb-wiki-mark" aria-hidden="true">W</span><b>Wikipedia &amp; Wikidata Lore</b>${titleConfPill}</div>
+                ${wiki.wikiUrl ? `<a class="m-wiki-extlink" href="${esc(wiki.wikiUrl)}" target="_blank" rel="noopener noreferrer">${esc(wiki.wikiTitle || data.name || 'Article')} ↗</a>` : ''}
+              </div>
+              ${showWikiExt ? `<p class="m-wiki-ext${longWikiExt ? ' clamped' : ''}" id="mWikiExtP">${esc(ext)}</p>` : ''}
+              ${longWikiExt ? `<button type="button" class="gb-wiki-more" id="mWikiMoreBtn">Read more</button>` : ''}
+              ${wikiTags.length ? `<div class="m-lore-tags">${wikiTags.join('')}</div>` : ''}
+            </section>`
+          : ''
+      }`;
+
+    richEl.querySelector('#mWikiMoreBtn')?.addEventListener('click', (e) => {
+      const p = richEl.querySelector('#mWikiExtP');
+      if (!p) return;
+      const clamped = p.classList.toggle('clamped');
+      e.currentTarget.textContent = clamped ? 'Read more' : 'Show less';
+    });
+
+    const spotBox = richEl.querySelector('#mSpotlightBox');
+    const toggleSpotlight = (el) => {
+      try {
+        const info = JSON.parse(el.dataset.spotlight);
+        const wasSelected = el.classList.contains('selected');
+        richEl.querySelectorAll('[data-spotlight].selected').forEach((n) => n.classList.remove('selected'));
+        if (wasSelected && spotBox && !spotBox.hidden) {
+          spotAbort?.abort();
+          spotBox.hidden = true;
+          spotBox.innerHTML = '';
+          return;
+        }
+        el.classList.add('selected');
+        openModalSpotlight(spotBox, info, seq);
+      } catch {
+        /* ignore */
+      }
+    };
+    richEl.querySelectorAll('[data-spotlight]').forEach((el) => {
+      el.addEventListener('click', (e) => {
+        if (e.target.closest('a[data-stop]')) return;
+        toggleSpotlight(el);
+      });
+      el.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter' || e.key === ' ') {
+          e.preventDefault();
+          toggleSpotlight(el);
+        }
+      });
+    });
+  }
+
+  async function mountModalRichDetails({ kind, id, tvmazeId, tmdbId, imdbId, name, year, existingSummary, richEl, seq }) {
+    if (!richEl) return;
+    richAbort?.abort();
+    spotAbort?.abort();
+    const cacheKey = `${kind}:${tvmazeId || id || 0}:${tmdbId || 0}:${(name || '').toLowerCase()}`;
+    if (richDetailCache.has(cacheKey)) {
+      renderRichModalContent(richEl, richDetailCache.get(cacheKey), existingSummary, seq);
+      return;
+    }
+
+    richAbort = new AbortController();
+    richEl.hidden = false;
+    richEl.innerHTML = `<div class="m-rich-loading"><span class="spinner" aria-hidden="true"></span><span>Loading cast portraits, crew &amp; Wikipedia lore…</span></div>`;
+    try {
+      const qs = new URLSearchParams({
+        kind: kind === 'movie' ? 'movie' : 'show',
+        ...(id ? { id: String(id) } : {}),
+        ...(tvmazeId ? { tvmazeId: String(tvmazeId) } : {}),
+        ...(tmdbId ? { tmdbId: String(tmdbId) } : {}),
+        ...(imdbId ? { imdbId } : {}),
+        ...(name ? { name } : {}),
+        ...(year ? { year: String(year).slice(0, 4) } : {}),
+      });
+      const data = await api(`/api/item/rich?${qs}`, { signal: richAbort.signal });
+      if (seq !== modalSeq || $('#modal').hidden) return;
+      if (richDetailCache.size >= 30) {
+        const first = richDetailCache.keys().next().value;
+        if (first !== undefined) richDetailCache.delete(first);
+      }
+      richDetailCache.set(cacheKey, data);
+      renderRichModalContent(richEl, data, existingSummary, seq);
+    } catch (err) {
+      if (err && err.name === 'AbortError') return;
+      if (seq === modalSeq && richEl) richEl.hidden = true;
+    }
+  }
 
   function openModal(key) {
     const g = state.groups.get(key);
@@ -1604,8 +1951,10 @@
     const multi = !isMovie && eps.length > 1;
     const statusCls = /running|released/i.test(show.status) ? 'running' : /ended/i.test(show.status) ? 'ended' : 'tbd';
     const epArg = isMovie ? null : first;
-    const { primary, isNew } = groupBadges(g);
+    const { primary, isNew, isDc, dcYear } = groupBadges(g);
     const isHidden = Boolean(show.hidden);
+    const dcOn = Boolean(!isMovie && ((show.directorsChoice && show.directorsChoice.enabled) || isDc));
+    const origYear = dcYear || (first && first.originYear) || (show.directorsChoice && show.directorsChoice.originYear) || (show.premiered || '').slice(0, 4);
     const extUrl = (det && !multi && det.episodeUrl) || (multi || isMovie ? show.url : first.url || show.url);
 
     $('#modalBody').innerHTML = `
@@ -1629,6 +1978,7 @@
       </div>
       <div class="m-content">
         <div class="m-facts">
+          ${dcOn ? `<span class="ev-pill dc" title="Virtual Release anchored to ${esc((show.directorsChoice && show.directorsChoice.anchorDate) || first.airdate || 'today')}">🎬 Director's Choice${origYear ? ` · Orig ${esc(origYear)}` : ''}</span>` : ''}
           ${primary ? evPillHtml(primary, false) : ''}
           ${isNew ? '<span class="ev-pill new">New</span>' : ''}
           ${srcBadge(src.name, src.kind)}
@@ -1664,6 +2014,7 @@
           }
           <button class="btn btn-watch${groupWatchInfo(g).allDone ? ' on' : ''}" id="modalWatch" type="button" aria-pressed="${groupWatchInfo(g).allDone}">${ICON.check} <span>${groupWatchInfo(g).allDone ? 'Watched' : 'Mark watched'}</span></button>
           <button class="btn btn-fav${show.favorite ? ' on' : ''}" id="modalFav" type="button" aria-pressed="${Boolean(show.favorite)}">${show.favorite ? ICON.star : ICON.starOutline} <span>${show.favorite ? 'Favorited' : 'Favorite'}</span></button>
+          ${!isMovie ? `<button class="btn btn-ghost btn-dc${dcOn ? ' on' : ''}" id="modalDcBtn" type="button" aria-pressed="${dcOn}" title="Schedule this show's full run virtually starting today">🎬 <span>${dcOn ? "Director's Choice ON" : "Director's Choice"}</span></button>` : ''}
           <button class="btn btn-ghost" id="modalGraxoboltBtn" type="button">⚡ Explore in Graxobolt</button>
           <a class="btn btn-ghost" id="modalExtLink" href="${esc(extUrl)}" target="_blank" rel="noopener noreferrer">${ICON.ext} ${isMovie ? 'TMDB' : 'TVmaze'}</a>
           ${show.imdbUrl ? `<a class="btn btn-ghost" href="${esc(show.imdbUrl)}" target="_blank" rel="noopener noreferrer">${ICON.ext} IMDb</a>` : ''}
@@ -1674,6 +2025,7 @@
               : `<button class="btn btn-danger" id="modalHide" type="button">${ICON.eyeOff} Hide ${isMovie ? 'movie' : 'show'}</button>`
           }
         </div>
+        <div class="m-rich" id="modalRich"></div>
         <div class="m-ext-custom">
           <span>External search query: <b id="modalExtPreview">${esc(extSearchQuery(show, epArg))}</b></span>
           <input id="modalExtInput" type="text" value="${esc(show.extQuery || '')}" placeholder="Override search title" />
@@ -1697,6 +2049,19 @@
         seedTmdbId: isMovie ? show.id : null,
         seedName: show.name,
       });
+    });
+
+    mountModalRichDetails({
+      kind,
+      id: show.id,
+      tvmazeId: isMovie ? null : show.id,
+      tmdbId: isMovie ? show.id : null,
+      imdbId: (show.externals && show.externals.imdb) || null,
+      name: show.name,
+      year: (show.premiered || '').slice(0, 4),
+      existingSummary: summary,
+      richEl: $('#modalRich'),
+      seq,
     });
 
     if (!det) {
@@ -1783,6 +2148,13 @@
       b.setAttribute('aria-pressed', String(fav));
       b.innerHTML = `${fav ? ICON.star : ICON.starOutline} <span>${fav ? 'Favorited' : 'Favorite'}</span>`;
     });
+    $('#modalDcBtn')?.addEventListener('click', async (e) => {
+      const b = e.currentTarget;
+      b.disabled = true;
+      const res = await toggleShowDirectorsChoice(show.id, show.name, !dcOn);
+      if (res !== null) closeModal();
+      else b.disabled = false;
+    });
     $('#modalHide')?.addEventListener('click', async () => {
       closeModal();
       await hideItem(show.id, show.name, kind);
@@ -1800,6 +2172,9 @@
     $('.modal-close').focus();
   }
   function closeModal() {
+    modalSeq++;
+    richAbort?.abort();
+    spotAbort?.abort();
     $('#modal').hidden = true;
     $('.modal-card')?.classList.remove('wide');
     document.body.style.overflow = '';
@@ -1916,6 +2291,38 @@
     }
   }
 
+  async function toggleShowDirectorsChoice(id, name, explicit = undefined, meta = {}) {
+    try {
+      const anchorDate = meta.anchorDate || ymd(new Date());
+      const res = await api(`/api/shows/${Number(id) || 0}/directors-choice`, {
+        method: 'POST',
+        body: JSON.stringify({
+          ...(explicit !== undefined ? { enabled: Boolean(explicit) } : {}),
+          anchorDate,
+          ...(meta.imdbId ? { imdbId: meta.imdbId } : {}),
+          ...(name ? { name } : {}),
+          ...(meta.year ? { year: meta.year } : {}),
+        }),
+      });
+      if (res.show) state.shows.set(res.show.id, { ...res.show, kind: 'show' });
+      if (res.settings) syncSettingsFromServer(res.settings, false);
+      const dc = res.directorsChoice;
+      const enabled = Boolean(dc && dc.enabled);
+      await reloadAll();
+      syncSearchState();
+      toast(
+        enabled
+          ? `🎬 Director's Choice: ${res.show ? res.show.name : name} starts today (${dc.originYear || ''} → ${dc.anchorDate})`
+          : `Turned off Director's Choice for ${res.show ? res.show.name : name}`,
+        'ok'
+      );
+      return { enabled, show: res.show, directorsChoice: dc };
+    } catch (e) {
+      toast(e.message, 'err');
+      return null;
+    }
+  }
+
   // ---------- Search ----------
   const searchInput = $('#searchInput');
   const searchResults = $('#searchResults');
@@ -1954,7 +2361,8 @@
               ${s.summary ? `<div class="sr-summary">${esc(stripHtml(s.summary))}</div>` : ''}
             </div>
             <div class="sr-acts">
-              <button class="sr-gb-btn" data-idx="${i}" type="button" title="Explore in Graxobolt 3D">⚡ 3D</button>
+              ${!isMovie ? `<button class="sr-dc-btn${s.directorsChoice && s.directorsChoice.enabled ? ' on' : ''}" data-idx="${i}" type="button" title="Director's Choice Virtual Release (start S01E01 today)">🎬 DC</button>` : ''}
+              <button class="sr-gb-btn" data-idx="${i}" type="button" title="Explore in Graxobolt">⚡ Graxobolt</button>
               <button class="add-btn${s.onCalendar ? ' on' : s.hidden ? ' is-hidden' : ''}" data-id="${s.id}" data-kind="${isMovie ? 'movie' : 'show'}" type="button">${s.onCalendar ? '✓ On calendar' : s.hidden ? 'Unhide' : '+ Add'}</button>
             </div>
           </div>`;
@@ -2023,12 +2431,15 @@
       const entry = (kind === 'movie' ? state.movies : state.shows).get(s.id);
       s.onCalendar = Boolean(entry && !entry.hidden);
       s.hidden = Boolean((entry && entry.hidden) || state.hiddenItems.some((h) => h.id === s.id && h.kind === kind));
+      if (kind === 'show') s.directorsChoice = entry && entry.directorsChoice ? entry.directorsChoice : null;
       const btn = $(`.add-btn[data-id="${s.id}"][data-kind="${kind}"]`, searchResults);
       if (btn) {
         btn.classList.toggle('on', s.onCalendar);
         btn.classList.toggle('is-hidden', s.hidden && !s.onCalendar);
         btn.textContent = s.onCalendar ? '✓ On calendar' : s.hidden ? 'Unhide' : '+ Add';
       }
+      const dcBtn = $(`.sr-dc-btn[data-idx]`, btn ? btn.closest('.sr-item') : searchResults);
+      if (dcBtn && kind === 'show') dcBtn.classList.toggle('on', Boolean(s.directorsChoice && s.directorsChoice.enabled));
     }
   }
 
@@ -2054,7 +2465,23 @@
       searchInput.blur();
     }
   });
-  searchResults.addEventListener('click', (e) => {
+  searchResults.addEventListener('click', async (e) => {
+    const dcBtn = e.target.closest('.sr-dc-btn');
+    if (dcBtn) {
+      const s = searchItems[Number(dcBtn.dataset.idx)];
+      if (!s || dcBtn.disabled) return;
+      dcBtn.disabled = true;
+      const next = !(s.directorsChoice && s.directorsChoice.enabled);
+      const res = await toggleShowDirectorsChoice(s.id, s.name, next, { year: (s.premiered || '').slice(0, 4) });
+      dcBtn.disabled = false;
+      if (res) {
+        s.onCalendar = true;
+        s.hidden = false;
+        s.directorsChoice = res.directorsChoice;
+        syncSearchState();
+      }
+      return;
+    }
     const gb = e.target.closest('.sr-gb-btn');
     if (gb) {
       const s = searchItems[Number(gb.dataset.idx)];
@@ -3120,6 +3547,22 @@
   }
   $('#watchedFilterBtn')?.addEventListener('click', () => toggleHideWatched());
 
+  async function toggleDirectorsChoiceFilter(explicit = undefined) {
+    const next = explicit !== undefined ? Boolean(explicit) : !state.showDirectorsChoice;
+    state.showDirectorsChoice = next;
+    store.set('showDc', next ? '1' : '0');
+    updateDcUi();
+    renderCalendar();
+    try {
+      const saved = await api('/api/settings', { method: 'POST', body: JSON.stringify({ showDirectorsChoice: next }) });
+      syncSettingsFromServer(saved, false);
+      if (next) await loadWeek(false);
+    } catch (err) {
+      toast(err.message, 'err');
+    }
+  }
+  $('#dcFilterBtn')?.addEventListener('click', () => toggleDirectorsChoiceFilter());
+
   // ---------- Period navigation & Month picker ----------
   function shiftWeek(n) {
     const todayStr = ymd(new Date());
@@ -3334,6 +3777,7 @@
     else if (e.key.toLowerCase() === 't') shiftWeek(0);
     else if (e.key.toLowerCase() === 'f') toggleFavFilter();
     else if (e.key.toLowerCase() === 'w') toggleHideWatched();
+    else if (e.key.toLowerCase() === 'c') toggleDirectorsChoiceFilter();
   });
 
   // ---------- Discover Deep-Dive & Graxobolt Tabs ----------
@@ -3371,13 +3815,25 @@
     const gv = $('#graxoboltView');
     if (!gv) return;
     if (!gbController) {
-      gv.innerHTML = '<div class="gb-loading"><span class="spinner" aria-hidden="true"></span><span>Igniting Graxobolt 3D engine…</span></div>';
+      gv.innerHTML = '<div class="gb-loading"><span class="spinner" aria-hidden="true"></span><span>Igniting Graxobolt engine…</span></div>';
       try {
         const mod = await import('/graxobolt.mjs');
         gbController = mod.mountGraxobolt(gv, {
           api,
           toast,
-          onFeedback: (payload) => sendDiscoverFeedback(payload),
+          onFeedback: async (payload) => {
+            if (payload && payload.action === 'dc') {
+              const it = payload.item || {};
+              const res = await toggleShowDirectorsChoice(
+                it.tvmazeId || payload.id || 0,
+                it.name,
+                it.directorsChoice !== undefined ? !it.directorsChoice : undefined,
+                { imdbId: it.imdbId || payload.imdbId, year: String(it.premiered || '').slice(0, 4) }
+              );
+              return res ? { enabled: res.enabled } : false;
+            }
+            return sendDiscoverFeedback(payload);
+          },
           onOpenModal: (item) => openDiscoverModal(item),
         });
       } catch (err) {
@@ -3688,10 +4144,11 @@
                     ${c.summary ? `<p class="disc-summary">${esc(c.summary)}</p>` : ''}
                     <div class="disc-card-acts" data-stop>
                       <button type="button" class="disc-act-btn primary" data-disc-act="track" data-disc-key="${esc(c.key)}">+ Calendar</button>
+                      ${c.kind === 'show' ? `<button type="button" class="disc-act-btn dc" data-disc-dc="${esc(c.key)}" title="Virtual Premiere starting Today (Director's Choice)">🎬 DC</button>` : ''}
                       <button type="button" class="disc-act-btn love" data-disc-act="liked" data-disc-key="${esc(c.key)}" title="Already seen and loved — trains Taste DNA">♥ Loved</button>
                       <button type="button" class="disc-act-btn seen" data-disc-act="seen" data-disc-key="${esc(c.key)}" title="Already watched — exclude cleanly">✓ Seen</button>
                       <button type="button" class="disc-act-btn nope" data-disc-act="dislike" data-disc-key="${esc(c.key)}" title="Not my taste — hide &amp; penalize traits">× Not for me</button>
-                      <button type="button" class="disc-act-btn" data-disc-gb="${esc(c.key)}" title="Explore constellation in Graxobolt 3D">⚡ 3D</button>
+                      <button type="button" class="disc-act-btn" data-disc-gb="${esc(c.key)}" title="Explore constellation in Graxobolt">⚡ Graxobolt</button>
                     </div>
                   </div>
                 </article>`
@@ -3792,6 +4249,22 @@
       });
       return;
     }
+    const dcDiscBtn = e.target.closest('[data-disc-dc]');
+    if (dcDiscBtn) {
+      const item = ((state.discover.data && state.discover.data.items) || []).find((x) => x.key === dcDiscBtn.dataset.discDc);
+      if (!item || dcDiscBtn.disabled) return;
+      dcDiscBtn.disabled = true;
+      const res = await toggleShowDirectorsChoice(item.tvmazeId || 0, item.name, true, {
+        imdbId: item.imdbId,
+        year: String(item.premiered || '').slice(0, 4),
+      });
+      if (!res) dcDiscBtn.disabled = false;
+      else {
+        dcDiscBtn.classList.add('on');
+        dcDiscBtn.textContent = '🎬 DC On';
+      }
+      return;
+    }
     const gbBtn = e.target.closest('[data-disc-gb]');
     if (gbBtn) {
       const item = ((state.discover.data && state.discover.data.items) || []).find((x) => x.key === gbBtn.dataset.discGb);
@@ -3820,6 +4293,7 @@
   });
 
   function openDiscoverModal(item) {
+    const seq = ++modalSeq;
     $('.modal-card')?.classList.remove('wide');
     const heroImg = item.backdrop || item.poster || '';
     const extHref = item.url || (item.tmdbId ? `https://www.themoviedb.org/${item.kind === 'movie' ? 'movie' : 'tv'}/${item.tmdbId}` : `https://www.tvmaze.com/shows/${item.tvmazeId}`);
@@ -3830,7 +4304,7 @@
           ${item.poster ? `<img class="m-poster" src="${esc(item.poster)}" alt="">` : ''}
           <div>
             <h2 class="m-show" id="modalTitle">${esc(item.name)}</h2>
-            <div class="m-ep"><span class="code">${item.matchPct}% Match</span>${item.kind === 'movie' ? 'Movie' : 'Series'}${item.premiered ? ` · ${esc(String(item.premiered).slice(0, 4))}` : ''}</div>
+            <div class="m-ep">${item.matchPct ? `<span class="code">${item.matchPct}% Match</span>` : ''}${item.kind === 'movie' ? 'Movie' : 'Series'}${item.premiered ? ` · ${esc(String(item.premiered).slice(0, 4))}` : ''}</div>
           </div>
         </div>
       </div>
@@ -3855,6 +4329,7 @@
         <p class="m-summary">${esc(item.summary || 'No description available.')}</p>
         <div class="m-actions">
           <button class="btn" id="discModTrack" type="button">+ Add to Calendar</button>
+          ${item.kind === 'show' ? `<button class="btn btn-ghost btn-dc" id="discModDc" type="button" title="Schedule full series starting today (Director's Choice)">🎬 Director's Choice</button>` : ''}
           <button class="btn btn-ghost" id="discModGraxobolt" type="button">⚡ Explore in Graxobolt</button>
           <button class="btn btn-ghost" id="discModLove" type="button">♥ Seen · Loved</button>
           <button class="btn btn-ghost" id="discModSeen" type="button">✓ Already Seen</button>
@@ -3862,9 +4337,23 @@
           <a class="btn btn-ghost" href="${esc(extHref)}" target="_blank" rel="noopener noreferrer">${ICON.ext} ${item.tmdbId ? 'TMDB' : 'TVmaze'}</a>
           ${item.imdbUrl ? `<a class="btn btn-ghost" href="${esc(item.imdbUrl)}" target="_blank" rel="noopener noreferrer">${ICON.ext} IMDb</a>` : ''}
         </div>
+        <div class="m-rich" id="modalRich"></div>
       </div>`;
     $('#modal').hidden = false;
     document.body.style.overflow = 'hidden';
+
+    mountModalRichDetails({
+      kind: item.kind === 'movie' ? 'movie' : 'show',
+      id: item.tvmazeId || item.tmdbId || null,
+      tvmazeId: item.tvmazeId || null,
+      tmdbId: item.tmdbId || null,
+      imdbId: item.imdbId || null,
+      name: item.name,
+      year: String(item.premiered || '').slice(0, 4),
+      existingSummary: item.summary || '',
+      richEl: $('#modalRich'),
+      seq,
+    });
 
     const actPayload = (action) => ({
       kind: item.kind,
@@ -3887,6 +4376,16 @@
     });
     $('#discModLove').addEventListener('click', async () => {
       if (await sendDiscoverFeedback(actPayload('liked'))) closeModal();
+    });
+    $('#discModDc')?.addEventListener('click', async (e) => {
+      const btn = e.currentTarget;
+      btn.disabled = true;
+      const res = await toggleShowDirectorsChoice(item.tvmazeId || 0, item.name, true, {
+        imdbId: item.imdbId,
+        year: String(item.premiered || '').slice(0, 4),
+      });
+      if (res) closeModal();
+      else btn.disabled = false;
     });
     $('#discModGraxobolt')?.addEventListener('click', () => {
       closeModal();

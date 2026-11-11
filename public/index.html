@@ -1,0 +1,193 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Viuhti · Visual Itinerary for Ultimate Home Theater Immersion</title>
+  <link rel="icon" href="favicon.svg" type="image/svg+xml" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link rel="preconnect" href="https://static.tvmaze.com" />
+  <link rel="preconnect" href="https://image.tmdb.org" />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Outfit:wght@500;600;700;800&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <svg id="svgDefs" style="display:none" aria-hidden="true">
+    <symbol id="i-tv" viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="12" rx="2" fill="none" stroke="currentColor" stroke-width="2.2"/><path d="M8 21h8" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"/></symbol>
+    <symbol id="i-stream" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9.5" fill="none" stroke="currentColor" stroke-width="2.2"/><path d="M10 8v8l6-4z" fill="currentColor"/></symbol>
+    <symbol id="i-physical" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9" fill="none" stroke="currentColor" stroke-width="2.2"/><circle cx="12" cy="12" r="2.5" fill="none" stroke="currentColor" stroke-width="2"/></symbol>
+    <symbol id="i-search" viewBox="0 0 24 24"><circle cx="11" cy="11" r="7" fill="none" stroke="currentColor" stroke-width="2.4"/><path d="m20 20-3.5-3.5" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"/></symbol>
+    <symbol id="i-ext" viewBox="0 0 24 24"><path d="M14 4h6v6M20 4l-9 9M18 14v5a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V7a1 1 0 0 1 1-1h5" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+    <symbol id="i-trash" viewBox="0 0 24 24"><path d="M4 7h16M10 11v6M14 11v6M6 7l1 13h10l1-13M9 7V4h6v3" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+    <symbol id="i-clock" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9" fill="none" stroke="currentColor" stroke-width="2"/><path d="M12 7v5l3 2" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></symbol>
+    <symbol id="i-cal" viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="16" rx="2" fill="none" stroke="currentColor" stroke-width="2"/><path d="M3 10h18M8 3v4M16 3v4" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></symbol>
+    <symbol id="i-star" viewBox="0 0 24 24"><path d="m12 3 2.7 5.6 6.1.9-4.4 4.3 1 6.1L12 17l-5.4 2.9 1-6.1-4.4-4.3 6.1-.9z" fill="currentColor"/></symbol>
+    <symbol id="i-starOutline" viewBox="0 0 24 24"><path d="m12 3 2.7 5.6 6.1.9-4.4 4.3 1 6.1L12 17l-5.4 2.9 1-6.1-4.4-4.3 6.1-.9z" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/></symbol>
+    <symbol id="i-globe" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9" fill="none" stroke="currentColor" stroke-width="2"/><path d="M3 12h18M12 3c3 3.5 3 14.5 0 18M12 3c-3 3.5-3 14.5 0 18" fill="none" stroke="currentColor" stroke-width="2"/></symbol>
+    <symbol id="i-close" viewBox="0 0 24 24"><path d="M6 6l12 12M18 6 6 18" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"/></symbol>
+    <symbol id="i-restore" viewBox="0 0 24 24"><path d="M4 11a8 8 0 1 0 2.3-5.7M4 4v5h5" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+    <symbol id="i-check" viewBox="0 0 24 24"><path d="m5 12 5 5 9-10" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+    <symbol id="i-alert" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9" fill="none" stroke="currentColor" stroke-width="2"/><path d="M12 7v6M12 16.5v.5" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"/></symbol>
+    <symbol id="i-tvBig" viewBox="0 0 32 32"><path d="M6.5 12.5 5.5 4.5 12.5 8.8Q16 7.8 19.5 8.8L26.5 4.5 25.5 12.5C27.8 15.8 27.6 21.8 24.2 24.8 21.8 27 19 28 16 28c-3 0-5.8-1-8.2-3.2C4.4 21.8 4.2 15.8 6.5 12.5Z" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linejoin="round"/><circle cx="11.5" cy="16.8" r="1.4" fill="currentColor"/><circle cx="20.5" cy="16.8" r="1.4" fill="currentColor"/><path d="M14.6 19.8h2.8L16 21.5Z" fill="currentColor"/><path d="M13 22.8q1.5 1.3 3 0 1.5 1.3 3 0" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/><path d="M3.2 18.2l3 .5M3.2 21.4l3-.4M28.8 18.2l-3 .5M28.8 21.4l-3-.4" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></symbol>
+  </svg>
+  <div class="bg-glow" aria-hidden="true"></div>
+
+  <header class="topbar">
+    <a class="brand" href="/" aria-label="Viuhti home">
+      <span class="brand-mark">
+        <svg viewBox="0 0 32 32" aria-hidden="true"><path d="M6.5 12.5 5.5 4.5 12.5 8.8Q16 7.8 19.5 8.8L26.5 4.5 25.5 12.5C27.8 15.8 27.6 21.8 24.2 24.8 21.8 27 19 28 16 28c-3 0-5.8-1-8.2-3.2C4.4 21.8 4.2 15.8 6.5 12.5Z" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linejoin="round"/><circle cx="11.5" cy="16.8" r="1.4" fill="currentColor"/><circle cx="20.5" cy="16.8" r="1.4" fill="currentColor"/><path d="M14.6 19.8h2.8L16 21.5Z" fill="currentColor"/><path d="M13 22.8q1.5 1.3 3 0 1.5 1.3 3 0" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/><path d="M3.2 18.2l3 .5M3.2 21.4l3-.4M28.8 18.2l-3 .5M28.8 21.4l-3-.4" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>
+      </span>
+      <span class="brand-text" title="Visual Itinerary for Ultimate Home Theater Immersion">Viu<b>hti</b></span>
+    </a>
+
+    <div class="search" id="searchBox">
+      <svg class="search-icon" viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="7" fill="none" stroke="currentColor" stroke-width="2"/><path d="m20 20-3.5-3.5" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+      <input id="searchInput" type="search" autocomplete="off" spellcheck="false" placeholder="Search TVmaze &amp; TMDB to add…" aria-label="Search shows and movies" />
+      <kbd class="search-kbd">/</kbd>
+      <div id="searchResults" class="search-results" role="listbox" hidden></div>
+    </div>
+
+    <div class="top-actions">
+      <div id="syncPill" class="sync-pill" hidden>
+        <span class="spinner" aria-hidden="true"></span><span id="syncText">Syncing…</span>
+      </div>
+      <button id="trashTopBtn" class="btn btn-ghost" type="button" title="Open Trash can to restore deleted shows &amp; movies">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h16M10 11v6M14 11v6M6 7l1 13h10l1-13M9 7V4h6v3" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        <span>Trash</span>
+        <span id="topTrashCount" class="count count-trash" hidden>0</span>
+      </button>
+      <button id="myShowsBtn" class="btn btn-ghost" type="button" title="Open Settings">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 6h16M4 12h16M4 18h10" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+        <span>Settings</span>
+        <span id="showCount" class="count">0</span>
+      </button>
+    </div>
+  </header>
+
+  <section class="weekbar">
+    <div class="week-nav">
+      <button id="prevWeek" class="icon-btn" type="button" title="Previous week (←)" aria-label="Previous week">
+        <svg viewBox="0 0 24 24"><path d="m15 5-7 7 7 7" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+      </button>
+      <button id="todayBtn" class="btn btn-small" type="button" title="Jump to this week (T)">Today</button>
+      <button id="nextWeek" class="icon-btn" type="button" title="Next week (→)" aria-label="Next week">
+        <svg viewBox="0 0 24 24"><path d="m9 5 7 7-7 7" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+      </button>
+      <div class="week-title">
+        <button id="weekPickerBtn" class="week-title-btn" type="button" aria-expanded="false" title="Open month calendar to jump to any week">
+          <h1 id="weekTitle">This week</h1>
+          <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="5" width="18" height="16" rx="2" fill="none" stroke="currentColor" stroke-width="2"/><path d="M3 10h18M8 3v4M16 3v4" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+        </button>
+        <span id="weekMeta" class="muted"></span>
+      </div>
+      <div id="monthPicker" class="month-picker" hidden></div>
+    </div>
+
+    <div class="week-controls">
+      <div class="seg" id="mediaSeg" role="group" aria-label="Content type">
+        <button data-value="shows" title="TV shows only">Shows</button>
+        <button data-value="both" title="TV shows and new movies together">Both</button>
+        <button data-value="movies" title="New movies released on streaming, TV, or physical media">Movies <span id="movieCount" class="seg-count">0</span></button>
+      </div>
+      <div class="seg" id="filterSeg" role="group" aria-label="Source filter">
+        <button data-value="all">All</button>
+        <button data-value="tv">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="5" width="18" height="12" rx="2" fill="none" stroke="currentColor" stroke-width="2"/><path d="M8 21h8" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>TV
+        </button>
+        <button data-value="stream">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9" fill="none" stroke="currentColor" stroke-width="2"/><path d="M10 8.5v7l5.5-3.5z" fill="currentColor"/></svg>Streaming
+        </button>
+        <button data-value="physical" title="Physical media releases (Blu-ray, 4K UHD, DVD)">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9" fill="none" stroke="currentColor" stroke-width="2"/><circle cx="12" cy="12" r="2.5" fill="none" stroke="currentColor" stroke-width="2"/></svg>Disc
+        </button>
+      </div>
+      <label class="genre-wrap" id="genreWrap" title="Filter calendar by genre">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 6h16M7 12h10m-7 6h4" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+        <select id="genreFilter" aria-label="Filter by genre">
+          <option value="">All genres</option>
+        </select>
+      </label>
+      <button id="favFilterBtn" class="fav-toggle" type="button" aria-pressed="false" title="Only show favorite shows (F)">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m12 3 2.7 5.6 6.1.9-4.4 4.3 1 6.1L12 17l-5.4 2.9 1-6.1-4.4-4.3 6.1-.9z" fill="currentColor"/></svg>
+        <span>Favorites</span>
+        <span id="favCount" class="fav-count">0</span>
+      </button>
+      <div class="seg" id="timeSeg" role="group" aria-label="Time display">
+        <button data-value="local" title="Show air dates/times converted to your timezone">My time</button>
+        <button data-value="network" title="Show original network air dates/times">Network</button>
+      </div>
+      <div class="seg" id="densitySeg" role="group" aria-label="Layout view">
+        <button data-value="cards" title="Large cards with logos" aria-label="Cards">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="4" y="4" width="16" height="7" rx="2" fill="none" stroke="currentColor" stroke-width="2"/><rect x="4" y="13" width="16" height="7" rx="2" fill="none" stroke="currentColor" stroke-width="2"/></svg>
+        </button>
+        <button data-value="compact" title="Compact list" aria-label="Compact">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 6h16M4 10h16M4 14h16M4 18h16" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+        </button>
+        <button data-value="agenda" title="Up Next agenda (today & upcoming)" aria-label="Up Next">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="5" cy="7" r="1.5" fill="currentColor"/><circle cx="5" cy="12" r="1.5" fill="currentColor"/><circle cx="5" cy="17" r="1.5" fill="currentColor"/><path d="M9 7h11M9 12h11M9 17h8" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>Up Next
+        </button>
+      </div>
+    </div>
+  </section>
+
+  <main id="calendar" class="calendar" aria-live="polite">
+    <div class="empty-state" style="padding:36px"><span class="spinner" style="display:inline-block;margin-right:8px;vertical-align:-2px"></span>Loading your calendar…</div>
+  </main>
+
+  <!-- Settings & Trash drawer -->
+  <div id="drawerScrim" class="scrim" hidden></div>
+  <aside id="drawer" class="drawer" aria-hidden="true" aria-label="Settings">
+    <div class="drawer-head">
+      <div>
+        <div class="drawer-title-row">
+          <h2>Settings</h2>
+          <div class="seg seg-sm" id="drawerMediaSeg" role="group" aria-label="Menu section">
+            <button data-value="settings" class="on">Settings</button>
+            <button data-value="trash" title="View &amp; restore removed shows and movies">Trash <span id="drawerTrashCount" class="seg-count seg-count-trash" hidden>0</span></button>
+          </div>
+        </div>
+        <p id="drawerSub" class="muted">0 shows · 0 movies</p>
+      </div>
+      <button id="drawerClose" class="icon-btn" type="button" aria-label="Close">
+        <svg viewBox="0 0 24 24"><path d="M6 6l12 12M18 6 6 18" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"/></svg>
+      </button>
+    </div>
+    <div id="drawerSettingsPane" class="drawer-settings">
+      <div class="drawer-actions">
+        <button id="refreshBtn" class="btn btn-small btn-ghost" type="button" title="Refresh all tracked shows from TVmaze">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20 11a8 8 0 1 0-2.3 5.7M20 5v6h-6" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+          Refresh from TVmaze
+        </button>
+      </div>
+      <div id="apiKeysBox" class="api-keys-box" hidden></div>
+      <div id="interestsBox" class="interests-box" hidden></div>
+      <div id="discoveryBox" class="discovery-box" hidden></div>
+      <div id="extSettingsBox" class="ext-settings-box" hidden></div>
+    </div>
+    <div class="drawer-tools">
+      <input id="showFilter" type="search" placeholder="Filter trash…" autocomplete="off" />
+    </div>
+    <div id="trashBar" class="trash-bar" hidden>
+      <span id="trashSummary" class="muted">0 deleted items</span>
+      <button id="emptyTrashBtn" class="btn btn-small btn-danger" type="button">Empty trash</button>
+    </div>
+    <ul id="showList" class="show-list"></ul>
+  </aside>
+
+  <!-- Episode modal -->
+  <div id="modal" class="modal" hidden>
+    <div class="modal-scrim" data-close></div>
+    <div class="modal-card" role="dialog" aria-modal="true" aria-labelledby="modalTitle">
+      <button class="icon-btn modal-close" type="button" data-close aria-label="Close">
+        <svg viewBox="0 0 24 24"><path d="M6 6l12 12M18 6 6 18" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"/></svg>
+      </button>
+      <div id="modalBody"></div>
+    </div>
+  </div>
+
+  <div id="toasts" class="toasts" aria-live="polite"></div>
+
+  <script src="app.js"></script>
+</body>
+</html>

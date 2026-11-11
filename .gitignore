@@ -1,0 +1,17 @@
+# Runtime database, cache, API keys, and local settings (keep fresh installs clean)
+data/
+*.log
+
+# Auto-generated machine-specific Windows startup wrapper
+scripts/run-hidden.cmd
+
+# Dependencies, environment overrides, and backups
+node_modules/
+.env
+.env.*
+*.zip
+*.tar.gz
+
+# OS artifacts
+.DS_Store
+Thumbs.db

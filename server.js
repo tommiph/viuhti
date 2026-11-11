@@ -19,6 +19,10 @@ const tmdb = require('./lib/tmdb');
 const discovery = require('./lib/discovery');
 const movies = require('./lib/movies');
 const hidden = require('./lib/hidden');
+const watched = require('./lib/watched');
+const digest = require('./lib/digest');
+const alerts = require('./lib/alerts');
+const recommender = require('./lib/recommender');
 
 tmdb.setKeyProvider(() => store.getTmdbApiKey());
 
@@ -64,7 +68,7 @@ function readBody(req) {
     let data = '';
     req.on('data', (c) => {
       data += c;
-      if (data.length > 1e6) req.destroy();
+      if (data.length > 5e6) req.destroy();
     });
     req.on('end', () => {
       try {
@@ -172,6 +176,91 @@ async function getForwardCatalog() {
     .sort((a, b) => (a.name === 'Unknown' ? 1 : b.name === 'Unknown' ? -1 : b.count - a.count || a.name.localeCompare(b.name)));
   onboardingCatalog = { at: Date.now(), fromDate, toDate, installDate, list, byId, genres, languages };
   return onboardingCatalog;
+}
+
+function icsEscape(s) {
+  return String(s || '')
+    .replace(/\\/g, '\\\\')
+    .replace(/\r?\n/g, '\\n')
+    .replace(/,/g, '\\,')
+    .replace(/;/g, '\\;');
+}
+
+function icsUtcStamp(ms) {
+  return new Date(ms).toISOString().replace(/[-:]/g, '').replace(/\.\d{3}Z$/, 'Z');
+}
+
+function buildIcsFeed({ media = 'both', favoritesOnly = false } = {}) {
+  const from = addDaysYmd(todayYmd(), -7);
+  const to = addDaysYmd(todayYmd(), 60);
+  const dtStamp = icsUtcStamp(Date.now());
+  const lines = [
+    'BEGIN:VCALENDAR',
+    'VERSION:2.0',
+    'PRODID:-//Viuhti//TV & Movie Release Calendar//EN',
+    'CALSCALE:GREGORIAN',
+    'METHOD:PUBLISH',
+    'X-WR-CALNAME:Viuhti Calendar',
+  ];
+
+  const pushAllDay = (uid, ymdStr, summary, desc, categories) => {
+    const startD = ymdStr.replace(/-/g, '');
+    const endD = addDaysYmd(ymdStr, 1).replace(/-/g, '');
+    lines.push('BEGIN:VEVENT');
+    lines.push(`UID:${uid}`);
+    lines.push(`DTSTAMP:${dtStamp}`);
+    lines.push(`DTSTART;VALUE=DATE:${startD}`);
+    lines.push(`DTEND;VALUE=DATE:${endD}`);
+    lines.push(`SUMMARY:${icsEscape(summary)}`);
+    if (desc) lines.push(`DESCRIPTION:${icsEscape(desc)}`);
+    if (categories) lines.push(`CATEGORIES:${icsEscape(categories)}`);
+    lines.push('END:VEVENT');
+  };
+
+  if (media !== 'movies') {
+    const showById = new Map(store.listShows().map((s) => [s.id, s]));
+    for (const e of store.schedule(from, to)) {
+      const s = showById.get(e.showId);
+      if (!s || (favoritesOnly && !s.favorite)) continue;
+      const code = `S${String(e.season).padStart(2, '0')}E${e.number == null ? 'SP' : String(e.number).padStart(2, '0')}`;
+      const summary = `${s.name} · ${code}${e.name ? ` — ${e.name}` : ''}`;
+      const ch = (s.network && s.network.name) || (s.webChannel && s.webChannel.name) || '';
+      const desc = [ch ? `Channel: ${ch}` : '', (s.genres || []).join(', ')].filter(Boolean).join(' · ');
+      const cats = [e.premiere === 'series' ? 'Series Premiere' : e.premiere === 'season' ? 'Season Premiere' : '', ...(s.genres || [])]
+        .filter(Boolean)
+        .join(',');
+      if (e.airtime && e.airstamp && Number.isFinite(Date.parse(e.airstamp))) {
+        const startMs = Date.parse(e.airstamp);
+        const endMs = startMs + Math.max(15, Number(e.runtime) || Number(s.runtime) || 45) * 60_000;
+        lines.push('BEGIN:VEVENT');
+        lines.push(`UID:viuhti-ep-${e.id}@viuhti.local`);
+        lines.push(`DTSTAMP:${dtStamp}`);
+        lines.push(`DTSTART:${icsUtcStamp(startMs)}`);
+        lines.push(`DTEND:${icsUtcStamp(endMs)}`);
+        lines.push(`SUMMARY:${icsEscape(summary)}`);
+        if (desc) lines.push(`DESCRIPTION:${icsEscape(desc)}`);
+        if (cats) lines.push(`CATEGORIES:${icsEscape(cats)}`);
+        lines.push('END:VEVENT');
+      } else {
+        pushAllDay(`viuhti-ep-${e.id}@viuhti.local`, e.airdate, summary, desc, cats);
+      }
+    }
+  }
+
+  if (media !== 'shows') {
+    const movieById = new Map(movies.listMovies().map((m) => [m.id, m]));
+    for (const me of movies.schedule(from, to)) {
+      const m = movieById.get(me.movieId);
+      if (!m || (favoritesOnly && !m.favorite)) continue;
+      const yr = (m.premiered || m.airdate || '').slice(0, 4);
+      const summary = `${m.name}${yr ? ` (${yr})` : ''} — ${me.name}`;
+      const desc = [m.channelName ? `Platform: ${m.channelName}` : '', (m.genres || []).join(', ')].filter(Boolean).join(' · ');
+      pushAllDay(`viuhti-movie-${m.id}@viuhti.local`, me.airdate, summary, desc, (m.genres || []).join(','));
+    }
+  }
+
+  lines.push('END:VCALENDAR');
+  return lines.join('\r\n') + '\r\n';
 }
 
 function lanUrls(port) {
@@ -387,15 +476,113 @@ async function handleApi(req, res, url) {
   if (pathname === '/api/status' && method === 'GET') {
     const addr = server.address();
     const urls = addr ? lanUrls(addr.port) : [];
+    const dig = digest.getStatus();
     return sendJson(res, 200, {
       showCount: store.activeCount(),
       moviesCount: movies.count(),
       hiddenCount: hidden.count(),
+      watchedCount: watched.count(),
       sync: store.sync,
       discovery: discovery.getStatus(),
       movieDiscovery: movies.getStatus(),
+      discover: recommender.getJobStatus(),
+      digest: { unreadCount: dig.unreadCount, unreadItems: dig.unreadItems, items: dig.items },
       settings: store.getSettings(),
       network: { host: HOST, port: addr ? addr.port : null, urls },
+    });
+  }
+
+  if (pathname === '/api/watched' && method === 'POST') {
+    const body = await readBody(req);
+    const val = body.watched !== undefined ? Boolean(body.watched) : true;
+    if (Array.isArray(body.items)) {
+      watched.setMany(body.items, val);
+    } else if (Number(body.id)) {
+      watched.set(body.kind === 'movie' ? 'movie' : 'episode', Number(body.id), val);
+    } else {
+      return sendJson(res, 400, { error: 'Missing watched id or items array' });
+    }
+    return sendJson(res, 200, { ok: true, watched: val, watchedCount: watched.count() });
+  }
+
+  if (pathname === '/api/digest' && method === 'GET') {
+    return sendJson(res, 200, digest.getStatus(), req);
+  }
+
+  if (pathname === '/api/digest/read' && method === 'POST') {
+    return sendJson(res, 200, digest.markRead());
+  }
+
+  if (pathname === '/api/alerts/test' && method === 'POST') {
+    const body = await readBody(req).catch(() => ({}));
+    const targetUrl = typeof body.webhookUrl === 'string' && body.webhookUrl.trim() ? body.webhookUrl : store.getSettings().webhookUrl;
+    if (!targetUrl) return sendJson(res, 400, { error: 'Enter a webhook URL first' });
+    const todayHighlights = alerts.collectTodaysAlerts({ store, movies, todayYmd: todayYmd() });
+    const msg = todayHighlights.length
+      ? todayHighlights.slice(0, 8).map((h) => `• ${h.name} (${h.label})`).join('\n')
+      : 'Test notification from Viuhti — premiere alerts are active!';
+    await alerts.dispatchWebhook(targetUrl, 'Viuhti · Premiere Alert Test', msg, { event: 'test', items: todayHighlights });
+    return sendJson(res, 200, { ok: true, previewCount: todayHighlights.length });
+  }
+
+  if (pathname === '/api/calendar.ics' && method === 'GET') {
+    const media = searchParams.get('media') || 'both';
+    const favoritesOnly = searchParams.get('favorites') === '1';
+    const body = buildIcsFeed({ media, favoritesOnly });
+    const disp = searchParams.get('download') === '1' ? 'attachment' : 'inline';
+    res.writeHead(200, {
+      'Content-Type': 'text/calendar; charset=utf-8',
+      'Content-Disposition': `${disp}; filename="viuhti.ics"`,
+      'Cache-Control': 'no-store',
+    });
+    res.end(body);
+    return;
+  }
+
+  if (pathname === '/api/backup/export' && method === 'GET') {
+    const includeKeys = searchParams.get('includeKeys') === '1';
+    const base = store.exportBackup({ includeKeys });
+    const payload = {
+      version: 1,
+      origin: 'viuhti',
+      exportedAt: new Date().toISOString(),
+      ...base,
+      movies: movies.exportMovies(),
+      hidden: hidden.exportData(),
+      watched: watched.exportData(),
+      discoveryRules: discovery.getRules(),
+      taste: recommender.exportData(),
+    };
+    const stamp = todayYmd();
+    res.writeHead(200, {
+      'Content-Type': 'application/json; charset=utf-8',
+      'Content-Disposition': `attachment; filename="viuhti-backup-${stamp}.json"`,
+      'Cache-Control': 'no-store',
+    });
+    res.end(JSON.stringify(payload, null, 2));
+    return;
+  }
+
+  if (pathname === '/api/backup/import' && method === 'POST') {
+    const body = await readBody(req);
+    if (!body || body.origin !== 'viuhti' || (!Array.isArray(body.shows) && !body.hidden && !body.movies)) {
+      return sendJson(res, 400, { error: 'Invalid Viuhti backup file' });
+    }
+    const replace = body.replace !== false;
+    if (body.hidden) hidden.importData(body.hidden, { replace });
+    if (body.watched) watched.importData(body.watched, { replace });
+    if (body.taste) recommender.importData(body.taste, { replace });
+    if (body.discoveryRules) discovery.setRules(body.discoveryRules);
+    store.importBackup({ shows: body.shows, settings: body.settings }, { replace });
+    if (body.movies) movies.importMovies(body.movies, { replace });
+    store.refresh();
+    movies.refreshStale();
+    return sendJson(res, 200, {
+      ok: true,
+      showCount: store.activeCount(),
+      moviesCount: movies.count(),
+      hiddenCount: hidden.count(),
+      watchedCount: watched.count(),
     });
   }
 
@@ -417,6 +604,62 @@ async function handleApi(req, res, url) {
     } catch (err) {
       return sendJson(res, 400, { error: err.message });
     }
+  }
+
+  if (pathname === '/api/discover' && method === 'GET') {
+    const media = searchParams.get('media') || 'all';
+    const lens = searchParams.get('lens') || 'mix';
+    const anchorKey = searchParams.get('anchor') || '';
+    const needSeeds = searchParams.get('seeds') === '1';
+    const rec = recommender.getRecommendations({ store, movies, hidden, watched, media, lens, anchorKey });
+    const starterSeeds = needSeeds || rec.profile.coldStart ? await recommender.buildStarterSeeds({ store, movies, hidden }) : [];
+    return sendJson(res, 200, { ...rec, job: recommender.getJobStatus(), starterSeeds }, req);
+  }
+
+  if (pathname === '/api/discover/run' && method === 'POST') {
+    return sendJson(res, 202, recommender.runDeepScan({ store, movies, hidden, watched, force: true }));
+  }
+
+  if (pathname === '/api/discover/feedback' && method === 'POST') {
+    const body = await readBody(req);
+    const out = await recommender.recordFeedback({
+      kind: body.kind,
+      id: body.id,
+      tvmazeId: body.tvmazeId,
+      tmdbId: body.tmdbId,
+      imdbId: body.imdbId,
+      action: body.action,
+      item: body.item || null,
+      store,
+      movies,
+      hidden,
+      digest,
+    });
+    const rec = recommender.getRecommendations({
+      store,
+      movies,
+      hidden,
+      watched,
+      media: body.media || 'all',
+      lens: body.lens || 'mix',
+      anchorKey: body.anchorKey || '',
+    });
+    return sendJson(res, 200, { ...out, discover: rec });
+  }
+
+  if (pathname === '/api/discover/traits' && method === 'POST') {
+    const body = await readBody(req);
+    recommender.updateTraitOverrides(body);
+    const rec = recommender.getRecommendations({
+      store,
+      movies,
+      hidden,
+      watched,
+      media: body.media || 'all',
+      lens: body.lens || 'mix',
+      anchorKey: body.anchorKey || '',
+    });
+    return sendJson(res, 200, { ok: true, discover: rec });
   }
 
   if (pathname === '/api/discovery/toggle' && method === 'POST') {
@@ -557,6 +800,10 @@ function listen(port, attemptsLeft = 50) {
 
 store.load();
 movies.load();
+watched.load();
+digest.load();
+alerts.load();
+recommender.load();
 hidden.load({
   activeShowIds: store.activeIds(),
   activeMovieIds: movies.activeIds(),
@@ -578,19 +825,16 @@ if (!discovery.hasExplicitLanguageRule() && store.activeCount() > 0 && (hidden.w
 
 listen(START_PORT);
 
-if (store.hasSavedList() || movies.hasSavedList() || discovery.hasSavedState()) {
-  store.refresh().then(() => {
-    discovery.runBiMonthlySync();
-    if (tmdb.hasApiKey()) movies.runBiMonthlySync();
-  });
+async function runPeriodicSync() {
+  if (!(store.hasSavedList() || movies.hasSavedList() || discovery.hasSavedState())) return;
+  await store.refresh();
+  discovery.runBiMonthlySync();
+  if (tmdb.hasApiKey()) movies.runBiMonthlySync();
   movies.refreshStale();
+  alerts.maybeSendDailyAlerts({ store, movies, todayYmd: todayYmd() }).catch((err) => {
+    console.error('Premiere webhook alert failed:', err.message);
+  });
 }
-setInterval(() => {
-  if (store.hasSavedList() || movies.hasSavedList() || discovery.hasSavedState()) {
-    store.refresh().then(() => {
-      discovery.runBiMonthlySync();
-      if (tmdb.hasApiKey()) movies.runBiMonthlySync();
-    });
-    movies.refreshStale();
-  }
-}, REFRESH_INTERVAL).unref();
+
+runPeriodicSync();
+setInterval(runPeriodicSync, REFRESH_INTERVAL).unref();

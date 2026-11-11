@@ -35,6 +35,9 @@ Switch to the dedicated **Discover** tab (`D` shortcut) to explore personalized 
 - **`.ics` Calendar Feed & One-Click Backups**:
   - Subscribe or download live RFC 5545 calendar events at `/api/calendar.ics` (supports `?media=shows|both|movies`, `?favorites=1`, and `?download=1`).
   - Export and restore complete portable JSON backups inside **Settings → Calendar Feed (.ics) & Backup** (preserving shows, movies, hidden items, watched state, sync rules, and Discover Taste DNA — with API keys & webhooks stripped by default unless checked).
+- **Graxobolt — 3D Neural Content Galaxy (`G` Tab)**:
+  - Lazy-loaded Three.js WebGL2 interactive 3D universe with theme-synced volumetric nebulas, neural synapse filaments, lightning arc expansions, and synthesized Web Audio sci-fi sound effects (with Mute toggle).
+  - Enter from your full **Taste Nebula**, search/warp to any show, movie, actor, creator, or theme nebula, or launch directly from any Episode Modal, Discover Card, or Search Result (`⚡ 3D`). With **⚡ Auto-Dive** on, clicking any star, person, or theme nebula plunges the camera into its **first-person Seed POV** and re-seeds the constellation outward ahead of you (`V` toggles **POV / Overview**; toggle Auto-Dive off to inspect or **Expand (+1 Hop)** inline).
 - **10 Visual Themes**: Switch anytime in **Settings** across 5 dark and 5 light themes (`Midnight`, `Grand Bistro`, `Departure Board`, `Silver Screen`, `Broadsheet`, `Blueprint`, `Swiss Atelier`, `Cyber Arcade`, `Greenhouse`, and `Comic Press`).
 - **External Search Customization**: Configure a custom `{query}` search URL template globally in Settings plus per-title custom query overrides in the detail modal.
 - **First-Start Setup & Windows Background Startup**: Includes a guided onboarding wizard on fresh installs and Windows silent login scripts (`scripts/install-startup.cmd` / `npm run startup:install`, removed via `scripts/uninstall-startup.cmd`).
@@ -47,6 +50,8 @@ Switch to the dedicated **Discover** tab (`D` shortcut) to explore personalized 
 | :--- | :--- |
 | `/` | Focus TVmaze & TMDB search bar |
 | `D` | Switch between **Calendar** and **Discover** tabs |
+| `G` | Open / exit **Graxobolt** 3D Galaxy tab (`1` / `2` / `3` also switch main tabs) |
+| `WASD` / `Q` `E` / `V` / `R` | Fly (`Shift` Warp boost), Up/Down, toggle POV/Overview, and Reset camera inside **Graxobolt** |
 | `←` / `→` | Previous / next day, week, or month |
 | `T` | Jump to today / current week |
 | `F` | Toggle **Favorites** filter (Calendar tab) |
@@ -59,8 +64,8 @@ Switch to the dedicated **Discover** tab (`D` shortcut) to explore personalized 
 ## Project Layout
 
 - [`server.js`](server.js) — HTTP server, static UI hosting, API routes, `.ics` generator, backup export/import, and periodic sync loop
-- `lib/` — Modular zero-dependency backend (`store.js`, `tvmaze.js`, `tmdb.js`, `discovery.js`, `movies.js`, `hidden.js`, `watched.js`, `digest.js`, `alerts.js`, `recommender.js`)
-- `public/` — Frontend (`index.html`, `styles.css`, `themes.css`, `app.js`, `favicon.svg`) designed for desktop and mobile (`390px+`)
+- `lib/` — Modular zero-dependency backend (`store.js`, `tvmaze.js`, `tmdb.js`, `discovery.js`, `movies.js`, `hidden.js`, `watched.js`, `digest.js`, `alerts.js`, `recommender.js`, `galaxy.js`)
+- `public/` — Frontend (`index.html`, `styles.css`, `themes.css`, `app.js`, `graxobolt.mjs`, `vendor/three/`, `favicon.svg`) designed for desktop and mobile (`390px+`)
 - `data/` — Runtime user database, caches, Taste DNA state, and local settings (**ignored by Git via `.gitignore`**)
 
 ---

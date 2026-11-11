@@ -215,7 +215,7 @@
     hideWatched: store.get('hideWatched', '0') === '1',
     timeMode: store.get('timeMode', 'local'),
     density: VALID_DENSITIES.has(rawDensity) ? rawDensity : 'cards',
-    tab: store.get('tab', 'calendar') === 'discover' ? 'discover' : 'calendar',
+    tab: ['discover', 'graxobolt'].includes(store.get('tab', 'calendar')) ? store.get('tab', 'calendar') : 'calendar',
     digestExpanded: false,
     discover: {
       media: store.get('discMedia', 'all'),
@@ -257,6 +257,7 @@
   ];
   const VALID_THEME_IDS = new Set(THEMES.map((t) => t.id));
   let themeSaveInflight = 0;
+  let gbController = null;
   function normalizeTheme(id) {
     const k = String(id || '').trim().toLowerCase();
     return VALID_THEME_IDS.has(k) ? k : 'midnight';
@@ -265,6 +266,7 @@
     const next = normalizeTheme(id);
     document.documentElement.dataset.theme = next;
     store.set('style', next);
+    if (gbController) gbController.refreshTheme();
     return next;
   }
   function syncSettingsFromServer(nextSettings, alwaysApplyTheme = false) {
@@ -1662,6 +1664,7 @@
           }
           <button class="btn btn-watch${groupWatchInfo(g).allDone ? ' on' : ''}" id="modalWatch" type="button" aria-pressed="${groupWatchInfo(g).allDone}">${ICON.check} <span>${groupWatchInfo(g).allDone ? 'Watched' : 'Mark watched'}</span></button>
           <button class="btn btn-fav${show.favorite ? ' on' : ''}" id="modalFav" type="button" aria-pressed="${Boolean(show.favorite)}">${show.favorite ? ICON.star : ICON.starOutline} <span>${show.favorite ? 'Favorited' : 'Favorite'}</span></button>
+          <button class="btn btn-ghost" id="modalGraxoboltBtn" type="button">⚡ Explore in Graxobolt</button>
           <a class="btn btn-ghost" id="modalExtLink" href="${esc(extUrl)}" target="_blank" rel="noopener noreferrer">${ICON.ext} ${isMovie ? 'TMDB' : 'TVmaze'}</a>
           ${show.imdbUrl ? `<a class="btn btn-ghost" href="${esc(show.imdbUrl)}" target="_blank" rel="noopener noreferrer">${ICON.ext} IMDb</a>` : ''}
           ${show.officialSite ? `<a class="btn btn-ghost" href="${esc(show.officialSite)}" target="_blank" rel="noopener noreferrer">${ICON.globe} Official site</a>` : ''}
@@ -1685,6 +1688,15 @@
       closeModal();
       openDrawer('settings');
       requestAnimationFrame(() => $('#extUrlInput')?.focus());
+    });
+    $('#modalGraxoboltBtn')?.addEventListener('click', () => {
+      closeModal();
+      openGraxobolt({
+        seedKind: isMovie ? 'movie' : 'show',
+        seedId: isMovie ? null : show.id,
+        seedTmdbId: isMovie ? show.id : null,
+        seedName: show.name,
+      });
     });
 
     if (!det) {
@@ -1941,7 +1953,10 @@
               </div>
               ${s.summary ? `<div class="sr-summary">${esc(stripHtml(s.summary))}</div>` : ''}
             </div>
-            <button class="add-btn${s.onCalendar ? ' on' : s.hidden ? ' is-hidden' : ''}" data-id="${s.id}" data-kind="${isMovie ? 'movie' : 'show'}" type="button">${s.onCalendar ? '✓ On calendar' : s.hidden ? 'Unhide' : '+ Add'}</button>
+            <div class="sr-acts">
+              <button class="sr-gb-btn" data-idx="${i}" type="button" title="Explore in Graxobolt 3D">⚡ 3D</button>
+              <button class="add-btn${s.onCalendar ? ' on' : s.hidden ? ' is-hidden' : ''}" data-id="${s.id}" data-kind="${isMovie ? 'movie' : 'show'}" type="button">${s.onCalendar ? '✓ On calendar' : s.hidden ? 'Unhide' : '+ Add'}</button>
+            </div>
           </div>`;
           })
           .join('') + noteHtml;
@@ -2040,6 +2055,20 @@
     }
   });
   searchResults.addEventListener('click', (e) => {
+    const gb = e.target.closest('.sr-gb-btn');
+    if (gb) {
+      const s = searchItems[Number(gb.dataset.idx)];
+      if (s) {
+        searchResults.hidden = true;
+        openGraxobolt({
+          seedKind: s.kind === 'movie' ? 'movie' : 'show',
+          seedId: s.kind === 'movie' ? null : s.id,
+          seedTmdbId: s.kind === 'movie' ? s.id : null,
+          seedName: s.name,
+        });
+      }
+      return;
+    }
     const btn = e.target.closest('.add-btn');
     if (btn) toggleSearchItem(Number(btn.closest('.sr-item').dataset.idx), btn);
   });
@@ -3294,8 +3323,11 @@
       searchInput.select();
     } else if (!$('#modal').hidden) {
       return;
-    } else if (e.key.toLowerCase() === 'd') switchTab(state.tab === 'discover' ? 'calendar' : 'discover');
+    } else if (e.key === '1') switchTab('calendar');
+    else if (e.key === '2') switchTab('discover');
+    else if (e.key === '3' || e.key.toLowerCase() === 'g') switchTab(state.tab === 'graxobolt' && e.key !== '3' ? 'calendar' : 'graxobolt');
     else if (e.key.toLowerCase() === 'm') ($('#drawer').classList.contains('open') ? closeDrawer : openDrawer)();
+    else if (state.tab !== 'graxobolt' && e.key.toLowerCase() === 'd') switchTab(state.tab === 'discover' ? 'calendar' : 'discover');
     else if (state.tab !== 'calendar') return;
     else if (e.key === 'ArrowLeft') shiftWeek(-1);
     else if (e.key === 'ArrowRight') shiftWeek(1);
@@ -3304,33 +3336,75 @@
     else if (e.key.toLowerCase() === 'w') toggleHideWatched();
   });
 
-  // ---------- Discover Deep-Dive Tab ----------
+  // ---------- Discover Deep-Dive & Graxobolt Tabs ----------
   function syncMainTabUi() {
+    const isCal = state.tab === 'calendar';
     const isDisc = state.tab === 'discover';
+    const isGb = state.tab === 'graxobolt';
     $$('#mainTabs button[data-tab]').forEach((b) => {
       const active = b.dataset.tab === state.tab;
       b.classList.toggle('on', active);
       b.setAttribute('aria-selected', String(active));
     });
     const wb = $('.weekbar');
-    if (wb) wb.hidden = isDisc;
+    if (wb) wb.hidden = !isCal;
     const cal = $('#calendar');
-    if (cal) cal.hidden = isDisc;
+    if (cal) cal.hidden = !isCal;
     const db = $('#digestBanner');
     if (db) {
-      if (isDisc) db.hidden = true;
+      if (!isCal) db.hidden = true;
       else renderDigestBanner(state.status && state.status.digest);
     }
     const dv = $('#discoverView');
     if (dv) dv.hidden = !isDisc;
+    const gv = $('#graxoboltView');
+    if (gv) gv.hidden = !isGb;
+    document.body.classList.toggle('gb-active', isGb);
+  }
+
+  async function openGraxobolt(seedOpt = null) {
+    if (state.tab !== 'graxobolt') {
+      state.tab = 'graxobolt';
+      store.set('tab', state.tab);
+      syncMainTabUi();
+    }
+    const gv = $('#graxoboltView');
+    if (!gv) return;
+    if (!gbController) {
+      gv.innerHTML = '<div class="gb-loading"><span class="spinner" aria-hidden="true"></span><span>Igniting Graxobolt 3D engine…</span></div>';
+      try {
+        const mod = await import('/graxobolt.mjs');
+        gbController = mod.mountGraxobolt(gv, {
+          api,
+          toast,
+          onFeedback: (payload) => sendDiscoverFeedback(payload),
+          onOpenModal: (item) => openDiscoverModal(item),
+        });
+      } catch (err) {
+        gv.innerHTML = `<div class="empty-state"><h2>Could not initialize Graxobolt</h2><p class="muted">${esc(err.message)}</p></div>`;
+        return;
+      }
+    } else {
+      gbController.resume();
+      gbController.refreshTheme();
+    }
+    if (!gbController.isReady()) return;
+    if (seedOpt) gbController.loadSeed(seedOpt);
+    else gbController.loadTaste();
   }
 
   function switchTab(nextTab) {
-    state.tab = nextTab === 'discover' ? 'discover' : 'calendar';
+    const valid = nextTab === 'discover' ? 'discover' : nextTab === 'graxobolt' ? 'graxobolt' : 'calendar';
+    if (state.tab === 'graxobolt' && valid !== 'graxobolt' && gbController) {
+      gbController.pause();
+    }
+    state.tab = valid;
     store.set('tab', state.tab);
     syncMainTabUi();
     if (state.tab === 'discover') {
       loadDiscover();
+    } else if (state.tab === 'graxobolt') {
+      openGraxobolt();
     } else if (state.showsLoaded) {
       loadWeek(false).catch(() => {});
     }
@@ -3617,6 +3691,7 @@
                       <button type="button" class="disc-act-btn love" data-disc-act="liked" data-disc-key="${esc(c.key)}" title="Already seen and loved — trains Taste DNA">♥ Loved</button>
                       <button type="button" class="disc-act-btn seen" data-disc-act="seen" data-disc-key="${esc(c.key)}" title="Already watched — exclude cleanly">✓ Seen</button>
                       <button type="button" class="disc-act-btn nope" data-disc-act="dislike" data-disc-key="${esc(c.key)}" title="Not my taste — hide &amp; penalize traits">× Not for me</button>
+                      <button type="button" class="disc-act-btn" data-disc-gb="${esc(c.key)}" title="Explore constellation in Graxobolt 3D">⚡ 3D</button>
                     </div>
                   </div>
                 </article>`
@@ -3717,6 +3792,20 @@
       });
       return;
     }
+    const gbBtn = e.target.closest('[data-disc-gb]');
+    if (gbBtn) {
+      const item = ((state.discover.data && state.discover.data.items) || []).find((x) => x.key === gbBtn.dataset.discGb);
+      if (item) {
+        openGraxobolt({
+          seedKind: item.kind,
+          seedId: item.tvmazeId || null,
+          seedTmdbId: item.tmdbId || null,
+          seedName: item.name,
+          imdbId: item.imdbId || null,
+        });
+      }
+      return;
+    }
     const card = e.target.closest('.disc-card');
     if (card) {
       const item = ((state.discover.data && state.discover.data.items) || []).find((x) => x.key === card.dataset.discKey);
@@ -3766,6 +3855,7 @@
         <p class="m-summary">${esc(item.summary || 'No description available.')}</p>
         <div class="m-actions">
           <button class="btn" id="discModTrack" type="button">+ Add to Calendar</button>
+          <button class="btn btn-ghost" id="discModGraxobolt" type="button">⚡ Explore in Graxobolt</button>
           <button class="btn btn-ghost" id="discModLove" type="button">♥ Seen · Loved</button>
           <button class="btn btn-ghost" id="discModSeen" type="button">✓ Already Seen</button>
           <button class="btn btn-danger" id="discModNope" type="button">× Not For Me</button>
@@ -3797,6 +3887,16 @@
     });
     $('#discModLove').addEventListener('click', async () => {
       if (await sendDiscoverFeedback(actPayload('liked'))) closeModal();
+    });
+    $('#discModGraxobolt')?.addEventListener('click', () => {
+      closeModal();
+      openGraxobolt({
+        seedKind: item.kind,
+        seedId: item.tvmazeId || null,
+        seedTmdbId: item.tmdbId || null,
+        seedName: item.name,
+        imdbId: item.imdbId || null,
+      });
     });
     $('#discModSeen').addEventListener('click', async () => {
       if (await sendDiscoverFeedback(actPayload('seen'))) closeModal();
@@ -3841,6 +3941,7 @@
   syncMainTabUi();
   reloadAll().finally(() => {
     if (state.tab === 'discover') loadDiscover();
+    else if (state.tab === 'graxobolt') openGraxobolt();
     if (!document.hidden) setTimeout(() => pollStatus(), 600);
   });
 })();

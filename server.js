@@ -23,6 +23,7 @@ const watched = require('./lib/watched');
 const digest = require('./lib/digest');
 const alerts = require('./lib/alerts');
 const recommender = require('./lib/recommender');
+const galaxy = require('./lib/galaxy');
 
 tmdb.setKeyProvider(() => store.getTmdbApiKey());
 
@@ -35,6 +36,7 @@ const MIME = {
   '.html': 'text/html; charset=utf-8',
   '.css': 'text/css; charset=utf-8',
   '.js': 'text/javascript; charset=utf-8',
+  '.mjs': 'text/javascript; charset=utf-8',
   '.json': 'application/json; charset=utf-8',
   '.svg': 'image/svg+xml',
   '.png': 'image/png',
@@ -660,6 +662,53 @@ async function handleApi(req, res, url) {
       anchorKey: body.anchorKey || '',
     });
     return sendJson(res, 200, { ok: true, discover: rec });
+  }
+
+  if (pathname === '/api/galaxy' && method === 'GET') {
+    const seedKind = searchParams.get('seedKind') || '';
+    const seedId = searchParams.get('seedId') || '';
+    const seedTmdbId = searchParams.get('seedTmdbId') || '';
+    const seedKeywordId = searchParams.get('seedKeywordId') || '';
+    const seedName = searchParams.get('seedName') || '';
+    const imdbId = searchParams.get('imdbId') || '';
+    const showDarkMatter = searchParams.get('darkMatter') === '1';
+
+    if (seedKind || seedId || seedTmdbId || seedName) {
+      const data = await galaxy.buildSeedGalaxy({
+        seedKind: seedKind || 'show',
+        seedId: seedId || null,
+        seedTmdbId: seedTmdbId || null,
+        seedKeywordId: seedKeywordId || null,
+        seedName,
+        imdbId: imdbId || null,
+        store,
+        movies,
+        hidden,
+        watched,
+      });
+      return sendJson(res, 200, data, req);
+    }
+
+    const data = await galaxy.buildTasteGalaxy({ store, movies, hidden, watched, showDarkMatter });
+    return sendJson(res, 200, data, req);
+  }
+
+  if (pathname === '/api/galaxy/expand' && method === 'POST') {
+    const body = await readBody(req);
+    const out = await galaxy.expandNode({
+      node: body.node || {},
+      existingKeys: body.existingKeys || [],
+      store,
+      movies,
+      hidden,
+      watched,
+    });
+    return sendJson(res, 200, out, req);
+  }
+
+  if (pathname === '/api/galaxy/search' && method === 'GET') {
+    const q = (searchParams.get('q') || '').trim();
+    return sendJson(res, 200, await galaxy.searchEntities(q), req);
   }
 
   if (pathname === '/api/discovery/toggle' && method === 'POST') {

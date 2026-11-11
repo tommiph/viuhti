@@ -9,8 +9,10 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link rel="preconnect" href="https://static.tvmaze.com" />
   <link rel="preconnect" href="https://image.tmdb.org" />
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Outfit:wght@500;600;700;800&display=swap" rel="stylesheet" />
+  <link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@600;700;800&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@500;600;700&family=Outfit:wght@500;600;700;800&family=Playfair+Display:ital,wght@0,600;0,700;0,800;1,500&family=Space+Grotesk:wght@500;600;700&display=swap" rel="stylesheet" />
+  <script>try { document.documentElement.dataset.theme = localStorage.getItem('viuhti.style') || 'midnight'; } catch {}</script>
   <link rel="stylesheet" href="styles.css" />
+  <link rel="stylesheet" href="themes.css" />
 </head>
 <body>
   <svg id="svgDefs" style="display:none" aria-hidden="true">
@@ -19,7 +21,8 @@
     <symbol id="i-physical" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9" fill="none" stroke="currentColor" stroke-width="2.2"/><circle cx="12" cy="12" r="2.5" fill="none" stroke="currentColor" stroke-width="2"/></symbol>
     <symbol id="i-search" viewBox="0 0 24 24"><circle cx="11" cy="11" r="7" fill="none" stroke="currentColor" stroke-width="2.4"/><path d="m20 20-3.5-3.5" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"/></symbol>
     <symbol id="i-ext" viewBox="0 0 24 24"><path d="M14 4h6v6M20 4l-9 9M18 14v5a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V7a1 1 0 0 1 1-1h5" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></symbol>
-    <symbol id="i-trash" viewBox="0 0 24 24"><path d="M4 7h16M10 11v6M14 11v6M6 7l1 13h10l1-13M9 7V4h6v3" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+    <symbol id="i-eyeOff" viewBox="0 0 24 24"><path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24M1 1l22 22" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+    <symbol id="i-eye" viewBox="0 0 24 24"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/><circle cx="12" cy="12" r="3" fill="none" stroke="currentColor" stroke-width="2"/></symbol>
     <symbol id="i-clock" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9" fill="none" stroke="currentColor" stroke-width="2"/><path d="M12 7v5l3 2" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></symbol>
     <symbol id="i-cal" viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="16" rx="2" fill="none" stroke="currentColor" stroke-width="2"/><path d="M3 10h18M8 3v4M16 3v4" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></symbol>
     <symbol id="i-star" viewBox="0 0 24 24"><path d="m12 3 2.7 5.6 6.1.9-4.4 4.3 1 6.1L12 17l-5.4 2.9 1-6.1-4.4-4.3 6.1-.9z" fill="currentColor"/></symbol>
@@ -42,9 +45,11 @@
     </a>
 
     <div class="search" id="searchBox">
-      <svg class="search-icon" viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="7" fill="none" stroke="currentColor" stroke-width="2"/><path d="m20 20-3.5-3.5" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
-      <input id="searchInput" type="search" autocomplete="off" spellcheck="false" placeholder="Search TVmaze &amp; TMDB to add…" aria-label="Search shows and movies" />
-      <kbd class="search-kbd">/</kbd>
+      <div class="search-field">
+        <svg class="search-icon" viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="7" fill="none" stroke="currentColor" stroke-width="2"/><path d="m20 20-3.5-3.5" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+        <input id="searchInput" type="search" autocomplete="off" spellcheck="false" placeholder="Search TVmaze &amp; TMDB to add…" aria-label="Search shows and movies" />
+        <kbd class="search-kbd">/</kbd>
+      </div>
       <div id="searchResults" class="search-results" role="listbox" hidden></div>
     </div>
 
@@ -52,26 +57,25 @@
       <div id="syncPill" class="sync-pill" hidden>
         <span class="spinner" aria-hidden="true"></span><span id="syncText">Syncing…</span>
       </div>
-      <button id="trashTopBtn" class="btn btn-ghost" type="button" title="Open Trash can to restore deleted shows &amp; movies">
-        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h16M10 11v6M14 11v6M6 7l1 13h10l1-13M9 7V4h6v3" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
-        <span>Trash</span>
-        <span id="topTrashCount" class="count count-trash" hidden>0</span>
+      <button id="hiddenTopBtn" class="btn btn-ghost" type="button" title="Open Hidden shows &amp; movies">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24M1 1l22 22" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        <span>Hidden</span>
+        <span id="topHiddenCount" class="count count-hidden" hidden>0</span>
       </button>
       <button id="myShowsBtn" class="btn btn-ghost" type="button" title="Open Settings">
         <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 6h16M4 12h16M4 18h10" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
         <span>Settings</span>
-        <span id="showCount" class="count">0</span>
       </button>
     </div>
   </header>
 
   <section class="weekbar">
     <div class="week-nav">
-      <button id="prevWeek" class="icon-btn" type="button" title="Previous week (←)" aria-label="Previous week">
+      <button id="prevWeek" class="icon-btn" type="button" title="Previous (←)" aria-label="Previous">
         <svg viewBox="0 0 24 24"><path d="m15 5-7 7 7 7" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg>
       </button>
-      <button id="todayBtn" class="btn btn-small" type="button" title="Jump to this week (T)">Today</button>
-      <button id="nextWeek" class="icon-btn" type="button" title="Next week (→)" aria-label="Next week">
+      <button id="todayBtn" class="btn btn-small" type="button" title="Jump to today (T)">Today</button>
+      <button id="nextWeek" class="icon-btn" type="button" title="Next (→)" aria-label="Next">
         <svg viewBox="0 0 24 24"><path d="m9 5 7 7-7 7" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg>
       </button>
       <div class="week-title">
@@ -118,14 +122,20 @@
         <button data-value="network" title="Show original network air dates/times">Network</button>
       </div>
       <div class="seg" id="densitySeg" role="group" aria-label="Layout view">
-        <button data-value="cards" title="Large cards with logos" aria-label="Cards">
+        <button data-value="day" title="Single day with full descriptions" aria-label="Day view">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="4" y="5" width="16" height="14" rx="2" fill="none" stroke="currentColor" stroke-width="2"/><path d="M8 10h8M8 14h5" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+        </button>
+        <button data-value="cards" title="Week cards with logos" aria-label="Cards">
           <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="4" y="4" width="16" height="7" rx="2" fill="none" stroke="currentColor" stroke-width="2"/><rect x="4" y="13" width="16" height="7" rx="2" fill="none" stroke="currentColor" stroke-width="2"/></svg>
         </button>
-        <button data-value="compact" title="Compact list" aria-label="Compact">
+        <button data-value="compact" title="Compact week list" aria-label="Compact">
           <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 6h16M4 10h16M4 14h16M4 18h16" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
         </button>
-        <button data-value="agenda" title="Up Next agenda (today & upcoming)" aria-label="Up Next">
-          <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="5" cy="7" r="1.5" fill="currentColor"/><circle cx="5" cy="12" r="1.5" fill="currentColor"/><circle cx="5" cy="17" r="1.5" fill="currentColor"/><path d="M9 7h11M9 12h11M9 17h8" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>Up Next
+        <button data-value="month" title="Monthly overview (show names and labels)" aria-label="Monthly view">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="4" width="18" height="17" rx="2" fill="none" stroke="currentColor" stroke-width="2"/><path d="M3 9h18M9 9v12M15 9v12M3 15h18" stroke="currentColor" stroke-width="1.8"/></svg>
+        </button>
+        <button data-value="agenda" title="Up Next agenda (today &amp; upcoming)" aria-label="Up Next">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="5" cy="7" r="1.5" fill="currentColor"/><circle cx="5" cy="12" r="1.5" fill="currentColor"/><circle cx="5" cy="17" r="1.5" fill="currentColor"/><path d="M9 7h11M9 12h11M9 17h8" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
         </button>
       </div>
     </div>
@@ -135,7 +145,7 @@
     <div class="empty-state" style="padding:36px"><span class="spinner" style="display:inline-block;margin-right:8px;vertical-align:-2px"></span>Loading your calendar…</div>
   </main>
 
-  <!-- Settings & Trash drawer -->
+  <!-- Settings & Hidden drawer -->
   <div id="drawerScrim" class="scrim" hidden></div>
   <aside id="drawer" class="drawer" aria-hidden="true" aria-label="Settings">
     <div class="drawer-head">
@@ -144,7 +154,7 @@
           <h2>Settings</h2>
           <div class="seg seg-sm" id="drawerMediaSeg" role="group" aria-label="Menu section">
             <button data-value="settings" class="on">Settings</button>
-            <button data-value="trash" title="View &amp; restore removed shows and movies">Trash <span id="drawerTrashCount" class="seg-count seg-count-trash" hidden>0</span></button>
+            <button data-value="hidden" title="View &amp; unhide hidden shows and movies">Hidden <span id="drawerHiddenCount" class="seg-count seg-count-hidden" hidden>0</span></button>
           </div>
         </div>
         <p id="drawerSub" class="muted">0 shows · 0 movies</p>
@@ -155,22 +165,23 @@
     </div>
     <div id="drawerSettingsPane" class="drawer-settings">
       <div class="drawer-actions">
-        <button id="refreshBtn" class="btn btn-small btn-ghost" type="button" title="Refresh all tracked shows from TVmaze">
+        <button id="refreshBtn" class="btn btn-small btn-ghost" type="button" title="Refresh shows &amp; movies from TVmaze and TMDB (also runs automatically twice a month looking 2 weeks ahead)">
           <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20 11a8 8 0 1 0-2.3 5.7M20 5v6h-6" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
           Refresh from TVmaze
         </button>
       </div>
+      <div id="themeSettingsBox" class="theme-settings-box" hidden></div>
       <div id="apiKeysBox" class="api-keys-box" hidden></div>
       <div id="interestsBox" class="interests-box" hidden></div>
+      <div id="hiddenSettingsBox" class="hidden-settings-box" hidden></div>
       <div id="discoveryBox" class="discovery-box" hidden></div>
       <div id="extSettingsBox" class="ext-settings-box" hidden></div>
     </div>
     <div class="drawer-tools">
-      <input id="showFilter" type="search" placeholder="Filter trash…" autocomplete="off" />
+      <input id="showFilter" type="search" placeholder="Filter hidden…" autocomplete="off" />
     </div>
-    <div id="trashBar" class="trash-bar" hidden>
-      <span id="trashSummary" class="muted">0 deleted items</span>
-      <button id="emptyTrashBtn" class="btn btn-small btn-danger" type="button">Empty trash</button>
+    <div id="hiddenBar" class="hidden-bar" hidden>
+      <span id="hiddenSummary" class="muted">0 hidden items</span>
     </div>
     <ul id="showList" class="show-list"></ul>
   </aside>

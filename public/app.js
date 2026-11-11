@@ -12,6 +12,8 @@
     d.innerHTML = html || '';
     return (d.textContent || '').trim();
   };
+  const summaryText = (html) =>
+    stripHtml(String(html || '').replace(/<br\s*\/?>/gi, '\n').replace(/<\/p>\s*<p[^>]*>/gi, '\n\n'));
   const pad = (n) => String(n).padStart(2, '0');
   const ymd = (d) => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
   const addDays = (d, n) => {
@@ -58,7 +60,8 @@
     physical: useIcon('physical'),
     search: useIcon('search'),
     ext: useIcon('ext'),
-    trash: useIcon('trash'),
+    eyeOff: useIcon('eyeOff'),
+    eye: useIcon('eye'),
     clock: useIcon('clock'),
     cal: useIcon('cal'),
     star: useIcon('star'),
@@ -192,63 +195,102 @@
   };
 
   // ---------- State ----------
+  const VALID_DENSITIES = new Set(['day', 'cards', 'compact', 'month', 'agenda']);
+  const rawDensity = store.get('density', 'cards');
   const state = {
     weekStart: startOfWeek(new Date()),
+    focusDate: ymd(new Date()),
     shows: new Map(),
     movies: new Map(),
-    trash: [],
+    hiddenItems: [],
     episodes: [],
     movieEvents: [],
     groups: new Map(), // key -> group (for modal lookup)
     media: store.get('media', 'shows'), // 'shows' | 'both' | 'movies'
-    drawerMedia: 'settings', // 'settings' | 'trash'
+    drawerMedia: 'settings', // 'settings' | 'hidden'
     filter: store.get('filter', 'all'),
     genre: store.get('genre', ''),
     favoritesOnly: store.get('favOnly', '0') === '1',
     timeMode: store.get('timeMode', 'local'),
-    density: store.get('density', 'cards'),
-    settings: { extSearchUrl: '', interests: [], apiKeys: { tmdb: false, tmdbHint: '', tvmaze: false, tvmazeHint: '' } },
+    density: VALID_DENSITIES.has(rawDensity) ? rawDensity : 'cards',
+    settings: { extSearchUrl: '', interests: [], showHidden: false, style: store.get('style', 'midnight'), apiKeys: { tmdb: false, tmdbHint: '', tvmaze: false, tvmazeHint: '' } },
     status: null,
     showsLoaded: false,
     loaded: false,
   };
 
+  const THEMES = [
+    { id: 'midnight', name: 'Midnight', mode: 'Dark', motif: 'Neon glass', swatches: ['#07080f', '#141730', '#8b5cf6', '#ec4899'] },
+    { id: 'bistro', name: 'Grand Bistro', mode: 'Light', motif: 'Restaurant menu', swatches: ['#f6efe0', '#fcf8ee', '#7a1826', '#9b6b1e'] },
+    { id: 'airport', name: 'Departure Board', mode: 'Dark', motif: 'Airport terminal', swatches: ['#0a0b0e', '#151820', '#ffb000', '#c8ff3d'] },
+    { id: 'cinema', name: 'Silver Screen', mode: 'Dark', motif: 'Movies & Art Deco', swatches: ['#0e0407', '#210912', '#e5be63', '#be123c'] },
+    { id: 'newspaper', name: 'Broadsheet', mode: 'Light', motif: 'Editorial print', swatches: ['#f1ede4', '#f7f4ec', '#141414', '#b91c1c'] },
+    { id: 'blueprint', name: 'Blueprint', mode: 'Dark', motif: 'Drafting table', swatches: ['#052142', '#093060', '#38bdf8', '#fde047'] },
+    { id: 'swiss', name: 'Swiss Atelier', mode: 'Light', motif: 'Sophisticated grid', swatches: ['#f4f3ee', '#ffffff', '#e12d1a', '#111111'] },
+    { id: 'cyber', name: 'Cyber Arcade', mode: 'Dark', motif: 'Neon CRT terminal', swatches: ['#04010c', '#0d0522', '#00f5d4', '#ff2a85'] },
+    { id: 'botanical', name: 'Greenhouse', mode: 'Light', motif: 'Botanical garden', swatches: ['#ecf3ea', '#fafdf9', '#276749', '#c25e39'] },
+    { id: 'popart', name: 'Comic Press', mode: 'Light', motif: 'Halftone pop art', swatches: ['#fffbef', '#ffffff', '#facc15', '#f43f5e'] },
+  ];
+  const VALID_THEME_IDS = new Set(THEMES.map((t) => t.id));
+  let themeSaveInflight = 0;
+  function normalizeTheme(id) {
+    const k = String(id || '').trim().toLowerCase();
+    return VALID_THEME_IDS.has(k) ? k : 'midnight';
+  }
+  function applyTheme(id) {
+    const next = normalizeTheme(id);
+    document.documentElement.dataset.theme = next;
+    store.set('style', next);
+    return next;
+  }
+  function syncSettingsFromServer(nextSettings, alwaysApplyTheme = false) {
+    if (!nextSettings) return;
+    const prevStyle = state.settings.style;
+    state.settings = { extSearchUrl: '', interests: [], showHidden: false, style: prevStyle || 'midnight', apiKeys: {}, ...nextSettings };
+    if (themeSaveInflight) state.settings.style = prevStyle;
+    else if (state.settings.style && (alwaysApplyTheme || state.settings.style !== prevStyle)) applyTheme(state.settings.style);
+  }
+  applyTheme(state.settings.style);
+
   // ---------- Data loading ----------
-  function updateTrashUi() {
-    const n = state.trash.length;
-    for (const sel of ['#topTrashCount', '#drawerTrashCount']) {
+  function updateHiddenUi() {
+    const n = state.hiddenItems.length;
+    for (const sel of ['#topHiddenCount', '#drawerHiddenCount']) {
       const el = $(sel);
       if (!el) continue;
       el.textContent = n;
       el.hidden = n === 0;
     }
-    const bar = $('#trashBar');
-    if (bar) bar.hidden = state.drawerMedia !== 'trash';
-    const sum = $('#trashSummary');
-    if (sum) sum.textContent = n ? `${n} item${n === 1 ? '' : 's'} in Trash · Click Restore to recover` : 'Trash is empty';
-    const emptyBtn = $('#emptyTrashBtn');
-    if (emptyBtn) emptyBtn.disabled = n === 0;
+    const bar = $('#hiddenBar');
+    if (bar) bar.hidden = state.drawerMedia !== 'hidden';
+    const sum = $('#hiddenSummary');
+    if (sum) sum.textContent = n ? `${n} hidden item${n === 1 ? '' : 's'} · Never auto-added by updates` : 'No hidden items';
   }
 
-  async function refreshTrash() {
-    state.trash = await api('/api/trash');
-    updateTrashUi();
-    if (state.drawerMedia === 'trash') renderTrashDrawer();
+  async function refreshHidden() {
+    state.hiddenItems = await api('/api/hidden');
+    updateHiddenUi();
+    if ($('#drawer').classList.contains('open')) {
+      renderHiddenSettings(state.settings);
+      if (state.drawerMedia === 'hidden') renderHiddenDrawer();
+    }
   }
 
   async function loadShows() {
-    const [showList, movieList, trashList] = await Promise.all([api('/api/shows'), api('/api/movies'), api('/api/trash')]);
+    const [showList, movieList, hiddenList] = await Promise.all([api('/api/shows'), api('/api/movies'), api('/api/hidden')]);
     state.shows = new Map(showList.map((s) => [s.id, { ...s, kind: 'show' }]));
     state.movies = new Map(movieList.map((m) => [m.id, { ...m, kind: 'movie' }]));
-    state.trash = trashList || [];
+    state.hiddenItems = hiddenList || [];
     state.showsLoaded = true;
-    $('#showCount').textContent = showList.length;
-    $('#movieCount').textContent = movieList.length;
+    $('#movieCount').textContent = movieList.filter((m) => !m.hidden).length;
     updateFavUi();
-    updateTrashUi();
+    updateHiddenUi();
     populateGenres();
-    if ($('#drawer').classList.contains('open')) renderInterestsSettings();
-    renderTrashDrawer();
+    if ($('#drawer').classList.contains('open')) {
+      renderInterestsSettings();
+      renderHiddenSettings(state.settings);
+    }
+    renderHiddenDrawer();
     if (state.loaded) renderCalendar(true);
   }
 
@@ -261,7 +303,7 @@
   function updateFavUi() {
     let favCount = 0;
     for (const col of activeCollections()) {
-      for (const s of col.values()) if (s.favorite) favCount++;
+      for (const s of col.values()) if (s.favorite && !s.hidden) favCount++;
     }
     $('#favCount').textContent = favCount;
     const btn = $('#favFilterBtn');
@@ -289,16 +331,34 @@
     $('#genreWrap').classList.toggle('active', Boolean(state.genre));
   }
 
+  function viewRange() {
+    if (state.density === 'day') {
+      const d = new Date(state.focusDate + 'T12:00:00');
+      return { start: d, end: d, fetchFrom: ymd(addDays(d, -1)), fetchTo: ymd(addDays(d, 1)), summaries: true };
+    }
+    if (state.density === 'month') {
+      const d = new Date(state.focusDate + 'T12:00:00');
+      const first = new Date(d.getFullYear(), d.getMonth(), 1);
+      const last = new Date(d.getFullYear(), d.getMonth() + 1, 0);
+      const start = startOfWeek(first);
+      const end = addDays(startOfWeek(last), 6);
+      return { start, end, month: d.getMonth(), year: d.getFullYear(), fetchFrom: ymd(addDays(start, -1)), fetchTo: ymd(addDays(end, 1)), summaries: false };
+    }
+    const start = state.weekStart;
+    const end = addDays(start, 6);
+    return { start, end, fetchFrom: ymd(addDays(start, -1)), fetchTo: ymd(addDays(end, 1)), summaries: false };
+  }
+
   let weekReq = 0;
   async function loadWeek(scrollToday = true) {
     const req = ++weekReq;
-    const from = ymd(addDays(state.weekStart, -1));
-    const to = ymd(addDays(state.weekStart, 7));
-    const data = await api(`/api/schedule?from=${from}&to=${to}`);
+    const vr = viewRange();
+    const q = `/api/schedule?from=${vr.fetchFrom}&to=${vr.fetchTo}${vr.summaries ? '&summaries=1' : ''}`;
+    const data = await api(q);
     if (req !== weekReq) return;
     state.episodes = data.episodes || [];
     state.movieEvents = data.movies || [];
-    if (data.settings) state.settings = { extSearchUrl: '', interests: [], apiKeys: {}, ...data.settings };
+    syncSettingsFromServer(data.settings, true);
     state.loaded = true;
     if (state.showsLoaded) renderCalendar(scrollToday);
   }
@@ -336,9 +396,11 @@
     return true;
   }
 
-  function buildGroups() {
+  function buildGroups(rangeStart = state.weekStart, rangeEnd = addDays(state.weekStart, 6)) {
     const days = new Map();
-    for (let i = 0; i < 7; i++) days.set(ymd(addDays(state.weekStart, i)), new Map());
+    for (let cur = new Date(rangeStart); cur <= rangeEnd; cur = addDays(cur, 1)) {
+      days.set(ymd(cur), new Map());
+    }
     if (state.media !== 'movies') {
       for (const ep of state.episodes) {
         const show = state.shows.get(ep.showId);
@@ -493,10 +555,17 @@
     return `<span class="ev-pill ${b.cls}" title="${esc(b.title || b.text)}">${esc(useShort ? b.short : b.text)}</span>`;
   }
 
+  function visibilityBtnHtml(show, kind) {
+    if (show.hidden) {
+      return `<button class="unhide-btn" type="button" data-unhide="${show.id}" data-kind="${kind}" data-stop title="Unhide ${esc(show.name)}" aria-label="Unhide ${esc(show.name)}">${ICON.eye}<span>Unhide</span></button>`;
+    }
+    return `<button class="dismiss-btn subtle" type="button" data-hide-card="${show.id}" data-kind="${kind}" data-stop title="Hide ${esc(show.name)}" aria-label="Hide ${esc(show.name)}">${ICON.close}</button>`;
+  }
+
   function cardHtml(g, idx, priority = false) {
     const { show, eps, kind } = g;
     const isMovie = kind === 'movie';
-    const isAuto = show.source === 'auto-weekly';
+    const isHidden = Boolean(show.hidden);
     const first = eps[0];
     const last = eps[eps.length - 1];
     const src = sourceOf(show);
@@ -528,23 +597,20 @@
       : '';
     const inlineBadges = isCompact
       ? [
+          isHidden ? '<span class="hidden-pill">Hidden</span>' : '',
           primary && primary.cls !== 'movie' ? evPillHtml(primary, true) : '',
           isNew ? '<span class="ev-pill new">New</span>' : '',
-          isAuto ? '<span class="auto-pill">Auto</span>' : '',
         ]
           .filter(Boolean)
           .join('')
       : '';
-    const dismissBtn = isAuto
-      ? `<button class="dismiss-btn" type="button" data-dismiss="${show.id}" data-kind="${kind}" data-stop title="Dismiss (not interested — hides now &amp; won't auto-add again)" aria-label="Dismiss ${esc(show.name)}">${ICON.close}</button>`
-      : `<button class="dismiss-btn subtle" type="button" data-remove-card="${show.id}" data-kind="${kind}" data-stop title="Remove ${esc(show.name)}" aria-label="Remove ${esc(show.name)}">${ICON.close}</button>`;
+    const visBtn = visibilityBtnHtml(show, kind);
     const art = artHtml(show, priority);
     return `
-      <article class="ep${aired ? ' aired' : ''}${show.favorite ? ' fav' : ''}${interests.length ? ' interest' : ''}${interests.length && isPrem ? ' interest-prem' : ''}" tabindex="0" data-key="${esc(g.key)}" style="--brand:${brand}">
+      <article class="ep${aired ? ' aired' : ''}${show.favorite ? ' fav' : ''}${isHidden ? ' is-hidden-item' : ''}${interests.length ? ' interest' : ''}${interests.length && isPrem ? ' interest-prem' : ''}" tabindex="0" data-key="${esc(g.key)}" style="--brand:${brand}">
         <div class="ep-art">
           ${art || `<div class="art-fallback">${esc(show.name)}</div>`}
           ${!isCompact && tlBadges ? `<div class="ep-badges-tl">${tlBadges}</div>` : ''}
-          ${!isCompact && isAuto ? '<span class="ep-auto" title="Automatically discovered this week">Auto</span>' : ''}
           ${isCompact ? '' : `<span class="ep-time">${esc(time)}</span><span class="ep-code-badge">${esc(code)}</span>`}
         </div>
         <div class="ep-body">
@@ -552,7 +618,7 @@
             <div class="ep-show">${esc(show.name)}</div>
             <div class="ep-card-btns">
               <button class="fav-btn${show.favorite ? ' on' : ''}" type="button" data-fav="${show.id}" data-kind="${kind}" data-stop aria-pressed="${Boolean(show.favorite)}" title="${show.favorite ? 'Remove from Favorites' : 'Mark as Favorite'}">${show.favorite ? ICON.star : ICON.starOutline}</button>
-              ${dismissBtn}
+              ${visBtn}
             </div>
           </div>
           ${inlineBadges ? `<div class="ep-compact-pills">${inlineBadges}</div>` : ''}
@@ -569,7 +635,7 @@
   function agendaRowHtml(g) {
     const { show, eps, kind } = g;
     const isMovie = kind === 'movie';
-    const isAuto = show.source === 'auto-weekly';
+    const isHidden = Boolean(show.hidden);
     const first = eps[0];
     const last = eps[eps.length - 1];
     const src = sourceOf(show);
@@ -599,22 +665,22 @@
       ? wideArtHtml(show.logo)
       : '';
     return `
-      <article class="agenda-row${show.favorite ? ' fav' : ''}${interests.length ? ' interest' : ''}${interests.length && isPrem ? ' interest-prem' : ''}" tabindex="0" data-key="${esc(g.key)}" style="--brand:${brand}">
+      <article class="agenda-row${show.favorite ? ' fav' : ''}${isHidden ? ' is-hidden-item' : ''}${interests.length ? ' interest' : ''}${interests.length && isPrem ? ' interest-prem' : ''}" tabindex="0" data-key="${esc(g.key)}" style="--brand:${brand}">
         <div class="agenda-time">${esc(time)}</div>
         <div class="agenda-thumb">${thumb}</div>
         <div class="agenda-main">
           <div class="agenda-title">
-            <span class="name">${esc(show.name)}</span>
-            ${primary ? evPillHtml(primary, primary.cls !== 'movie') : ''}
-            ${isNew ? '<span class="ev-pill new">New</span>' : ''}
-            ${isAuto ? '<span class="auto-pill">Auto</span>' : ''}
-            ${interests.length ? interestPillsHtml(interests, isPrem, true) : ''}
-            <button class="fav-btn${show.favorite ? ' on' : ''}" type="button" data-fav="${show.id}" data-kind="${kind}" data-stop aria-pressed="${Boolean(show.favorite)}" title="${show.favorite ? 'Remove from Favorites' : 'Mark as Favorite'}">${show.favorite ? ICON.star : ICON.starOutline}</button>
-            ${
-              isAuto
-                ? `<button class="dismiss-btn" type="button" data-dismiss="${show.id}" data-kind="${kind}" data-stop title="Dismiss (not interested — hides now &amp; won't auto-add again)" aria-label="Dismiss ${esc(show.name)}">${ICON.close}</button>`
-                : `<button class="dismiss-btn subtle" type="button" data-remove-card="${show.id}" data-kind="${kind}" data-stop title="Remove ${esc(show.name)}" aria-label="Remove ${esc(show.name)}">${ICON.close}</button>`
-            }
+            <div class="agenda-title-main">
+              <span class="name">${esc(show.name)}</span>
+              ${isHidden ? '<span class="hidden-pill">Hidden</span>' : ''}
+              ${primary ? evPillHtml(primary, primary.cls !== 'movie') : ''}
+              ${isNew ? '<span class="ev-pill new">New</span>' : ''}
+              ${interests.length ? interestPillsHtml(interests, isPrem, true) : ''}
+            </div>
+            <div class="ep-card-btns">
+              <button class="fav-btn${show.favorite ? ' on' : ''}" type="button" data-fav="${show.id}" data-kind="${kind}" data-stop aria-pressed="${Boolean(show.favorite)}" title="${show.favorite ? 'Remove from Favorites' : 'Mark as Favorite'}">${show.favorite ? ICON.star : ICON.starOutline}</button>
+              ${visibilityBtnHtml(show, kind)}
+            </div>
           </div>
           <div class="agenda-sub"><span class="code">${esc(code)}</span>${esc(title)}</div>
         </div>
@@ -661,28 +727,186 @@
     }, 350);
   }
 
+  function dayCardHtml(g, priority = false) {
+    const { show, eps, kind } = g;
+    const isMovie = kind === 'movie';
+    const isHidden = Boolean(show.hidden);
+    const first = eps[0];
+    const last = eps[eps.length - 1];
+    const src = sourceOf(show);
+    const brand = brandColor(src.name);
+    const multi = !isMovie && eps.length > 1;
+    const code = isMovie
+      ? (show.premiered || show.airdate || '').slice(0, 4) || 'Movie'
+      : multi
+      ? `${epCode(first)}–${last.season === first.season ? 'E' + pad(last.number) : epCode(last)}`
+      : epCode(first);
+    const title = isMovie
+      ? [show.runtime ? `${show.runtime}m` : '', (show.genres || []).slice(0, 2).join(' · ')].filter(Boolean).join(' · ') || first.name
+      : multi
+      ? `${eps.length} episodes`
+      : first.name || 'TBA';
+    const { primary, isNew } = groupBadges(g);
+    const interests = matchedInterests(show);
+    const isPrem = Boolean(primary && (primary.cls === 'series-prem' || primary.cls === 'season-prem'));
+    const time = isMovie ? (src.kind === 'tv' ? 'TV Premiere' : src.kind === 'physical' ? 'Physical' : 'Streaming') : timeLabel(first, show);
+    const runtime = first.runtime || show.runtime;
+    const art = artHtml(show, priority);
+    const visBtn = visibilityBtnHtml(show, kind);
+    const tlBadges = [
+      primary ? `<span class="ep-tag ${primary.cls}" title="${esc(primary.title)}">${esc(primary.text)}</span>` : '',
+      isNew ? '<span class="ep-tag new" title="Brand-new release">New</span>' : '',
+    ]
+      .filter(Boolean)
+      .join('');
+
+    let descHtml = '';
+    if (isMovie) {
+      const sum = summaryText(first.summary || '');
+      descHtml = sum ? `<p class="day-card-desc">${esc(sum)}</p>` : '<p class="day-card-desc empty">No synopsis available yet.</p>';
+    } else if (!multi) {
+      const epSum = summaryText(first.summary || '');
+      const showSum = summaryText(first.showSummary || '');
+      if (epSum) descHtml = `<p class="day-card-desc">${esc(epSum)}</p>`;
+      else if (showSum) descHtml = `<p class="day-card-desc"><span class="muted">Series overview: </span>${esc(showSum)}</p>`;
+      else descHtml = '<p class="day-card-desc empty">No episode description available yet.</p>';
+    } else {
+      const showSum = summaryText(first.showSummary || '');
+      const epRows = eps
+        .map((e) => {
+          const eb = epEventBadge(e);
+          const es = summaryText(e.summary || '');
+          return `
+            <li class="day-ep-item">
+              <div class="day-ep-head">
+                <span class="code">${esc(epCode(e))}</span>
+                <span>${esc(e.name || 'TBA')}</span>
+                ${eb ? evPillHtml(eb, true) : ''}
+              </div>
+              ${es ? `<p class="day-ep-sum">${esc(es)}</p>` : ''}
+            </li>`;
+        })
+        .join('');
+      descHtml = `${showSum ? `<p class="day-card-desc">${esc(showSum)}</p>` : ''}<ul class="day-ep-list">${epRows}</ul>`;
+    }
+
+    return `
+      <article class="day-card${show.favorite ? ' fav' : ''}${isHidden ? ' is-hidden-item' : ''}${interests.length ? ' interest' : ''}" tabindex="0" data-key="${esc(g.key)}" style="--brand:${brand}">
+        <div class="day-card-art">
+          ${art || `<div class="art-fallback">${esc(show.name)}</div>`}
+          ${tlBadges ? `<div class="ep-badges-tl">${tlBadges}</div>` : ''}
+          <span class="ep-time">${esc(time)}</span>
+          <span class="ep-code-badge">${esc(code)}</span>
+        </div>
+        <div class="day-card-body">
+          <div class="day-card-top">
+            <div class="day-card-show">${esc(show.name)}</div>
+            <div class="ep-card-btns">
+              <button class="fav-btn${show.favorite ? ' on' : ''}" type="button" data-fav="${show.id}" data-kind="${kind}" data-stop aria-pressed="${Boolean(show.favorite)}" title="${show.favorite ? 'Remove from Favorites' : 'Mark as Favorite'}">${show.favorite ? ICON.star : ICON.starOutline}</button>
+              ${visBtn}
+            </div>
+          </div>
+          <div class="day-card-meta">
+            ${isHidden ? '<span class="hidden-pill">Hidden</span>' : ''}
+            ${srcBadge(src.name, src.kind)}
+            ${runtime ? `<span class="day-card-runtime">${runtime} min</span>` : ''}
+            ${interests.length ? interestPillsHtml(interests, isPrem, true) : ''}
+            ${extSearchBtnHtml(show, isMovie ? null : first)}
+          </div>
+          ${!isMovie || title !== first.name ? `<div class="day-card-ep">${isMovie ? '' : `<span class="code">${esc(code)}</span>`}${esc(title)}</div>` : ''}
+          ${descHtml}
+        </div>
+      </article>`;
+  }
+
+  function monthItemHtml(g) {
+    const { show, eps, kind } = g;
+    const isMovie = kind === 'movie';
+    const isHidden = Boolean(show.hidden);
+    const first = eps[0];
+    const last = eps[eps.length - 1];
+    const src = sourceOf(show);
+    const brand = brandColor(src.name);
+    const { primary, isNew } = groupBadges(g);
+    const interests = matchedInterests(show);
+    const isPrem = Boolean(primary && (primary.cls === 'series-prem' || primary.cls === 'season-prem'));
+    const multi = !isMovie && eps.length > 1;
+    const code = isMovie
+      ? src.kind === 'tv'
+        ? 'TV'
+        : src.kind === 'physical'
+        ? 'Disc'
+        : 'Movie'
+      : multi
+      ? `${epCode(first)}–${last.season === first.season ? 'E' + pad(last.number) : epCode(last)}`
+      : epCode(first);
+    const labels = [
+      `<span class="m-lbl">${esc(code)}</span>`,
+      isHidden ? '<span class="hidden-pill">Hidden</span>' : '',
+      primary && primary.cls !== 'movie' ? evPillHtml(primary, true) : '',
+      isNew ? '<span class="ev-pill new">New</span>' : '',
+      show.favorite ? '<span class="m-lbl m-lbl-fav" title="Favorite">★</span>' : '',
+      interests.length
+        ? interests
+            .slice(0, 2)
+            .map((gr, i) => `<span class="interest-pill${isPrem ? ' bounce' : ''}"${isPrem ? ` style="animation-delay:${i * 110}ms"` : ''}>${esc(gr)}</span>`)
+            .join('')
+        : '',
+    ]
+      .filter(Boolean)
+      .join('');
+    return `
+      <button type="button" class="m-ev${show.favorite ? ' fav' : ''}${isHidden ? ' is-hidden-item' : ''}${interests.length ? ' interest' : ''}" data-key="${esc(g.key)}" style="--brand:${brand}" title="${esc(`${show.name} · ${code}${isHidden ? ' (Hidden)' : ''}`)}">
+        <span class="m-ev-name">${esc(show.name)}</span>
+        <span class="m-ev-labels">${labels}</span>
+      </button>`;
+  }
+
   function renderCalendar(scrollToday = false) {
     predecodeGen++;
     const cal = $('#calendar');
-    cal.className = `calendar ${state.density}`;
-    const end = addDays(state.weekStart, 6);
-    const sameMonth = state.weekStart.getMonth() === end.getMonth();
-    $('#weekTitle').textContent = `${fmtDay(state.weekStart, { month: 'short', day: 'numeric' })} – ${fmtDay(end, sameMonth ? { day: 'numeric' } : { month: 'short', day: 'numeric' })}, ${end.getFullYear()}`;
+    cal.className = `calendar ${state.density === 'day' ? 'day-view' : state.density}`;
+    const today = ymd(new Date());
+    const vr = viewRange();
+    if (state.density === 'day') {
+      const fd = new Date(state.focusDate + 'T12:00:00');
+      $('#weekTitle').textContent = fmtDay(fd, { weekday: 'long', month: 'short', day: 'numeric', year: 'numeric' });
+    } else if (state.density === 'month') {
+      const md = new Date(state.focusDate + 'T12:00:00');
+      $('#weekTitle').textContent = fmtDay(md, { month: 'long', year: 'numeric' });
+    } else {
+      const end = addDays(state.weekStart, 6);
+      const sameMonth = state.weekStart.getMonth() === end.getMonth();
+      $('#weekTitle').textContent = `${fmtDay(state.weekStart, { month: 'short', day: 'numeric' })} – ${fmtDay(end, sameMonth ? { day: 'numeric' } : { month: 'short', day: 'numeric' })}, ${end.getFullYear()}`;
+    }
 
     if (!state.showsLoaded || !state.loaded) return;
 
     const totalShows = state.media === 'movies' ? state.movies.size : state.media === 'both' ? state.shows.size + state.movies.size : state.shows.size;
     if (totalShows === 0) {
-      $('#weekMeta').textContent = `Week ${isoWeek(state.weekStart)}`;
+      $('#weekMeta').textContent =
+        state.density === 'month'
+          ? fmtDay(new Date(state.focusDate + 'T12:00:00'), { month: 'long', year: 'numeric' })
+          : `Week ${isoWeek(state.weekStart)}`;
       cal.innerHTML = emptyStateHtml();
       bindEmptyState();
       return;
     }
 
-    const days = buildGroups();
+    const days = buildGroups(vr.start, vr.end);
     const total = days.reduce((n, d) => n + d.groups.reduce((m, g) => m + g.eps.length, 0), 0);
     const noun = state.media === 'movies' ? 'movie' : state.media === 'both' ? 'release' : 'episode';
-    const metaParts = [`Week ${isoWeek(state.weekStart)}`, `${total} ${noun}${total === 1 ? '' : 's'}`];
+    const leadLabel =
+      state.density === 'day'
+        ? state.focusDate === today
+          ? 'Today'
+          : state.focusDate === ymd(addDays(new Date(), 1))
+          ? 'Tomorrow'
+          : `Week ${isoWeek(vr.start)}`
+        : state.density === 'month'
+        ? fmtDay(new Date(state.focusDate + 'T12:00:00'), { month: 'short', year: 'numeric' })
+        : `Week ${isoWeek(state.weekStart)}`;
+    const metaParts = [leadLabel, `${total} ${noun}${total === 1 ? '' : 's'}`];
     if (state.favoritesOnly) metaParts.push('Favorites only');
     if (state.genre) metaParts.push(state.genre);
     if (state.media !== 'movies') metaParts.push(state.timeMode === 'local' ? 'your local time' : 'network time');
@@ -708,7 +932,48 @@
       });
     }
 
-    const today = ymd(new Date());
+    if (state.density === 'day') {
+      const bucket = days[0] || { key: state.focusDate, groups: [] };
+      const d = new Date(bucket.key + 'T12:00:00');
+      const count = bucket.groups.reduce((m, g) => m + g.eps.length, 0);
+      cal.innerHTML = `
+        <section class="day${bucket.key === today ? ' today' : ''}" data-day="${bucket.key}">
+          <header class="day-head">
+            <div class="day-name">${esc(fmtDay(d, { weekday: 'long' }))}</div>
+            <div class="day-date"><span class="day-num">${d.getDate()}</span>${esc(fmtDay(d, { month: 'short', year: 'numeric' }))} · <span class="day-count">${count}</span></div>
+          </header>
+          <div class="day-body">
+            ${bucket.groups.length ? bucket.groups.map((g, i) => dayCardHtml(g, i < 3)).join('') : `<div class="day-empty">${state.media === 'movies' ? 'No movies scheduled for this day.' : 'No episodes scheduled for this day.'}</div>`}
+          </div>
+        </section>`;
+      scheduleImagePredecode();
+      return;
+    }
+
+    if (state.density === 'month') {
+      const dowNames = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
+      cal.innerHTML = `
+        <div class="month-dow-row">${dowNames.map((w) => `<div class="month-dow">${w}</div>`).join('')}</div>
+        ${days
+          .map(({ key, groups }) => {
+            const d = new Date(key + 'T12:00:00');
+            const outMonth = d.getMonth() !== vr.month;
+            const count = groups.reduce((m, g) => m + g.eps.length, 0);
+            const cls = ['month-cell', outMonth ? 'out' : '', key === today ? 'today' : '', groups.length ? '' : 'empty-day'].filter(Boolean).join(' ');
+            const dayNum = d.getDate() === 1 ? fmtDay(d, { month: 'short', day: 'numeric' }) : String(d.getDate());
+            return `
+              <section class="${cls}" data-day="${key}">
+                <button type="button" class="month-day-jump" data-jump-day="${key}" title="Open ${esc(key)} in Day view">
+                  <span><span class="m-dow-inline">${esc(fmtDay(d, { weekday: 'short' }))}</span><span class="month-day-num">${esc(dayNum)}</span></span>
+                  ${count ? `<span class="day-count">${count}</span>` : ''}
+                </button>
+                <div class="month-cell-body">${groups.map(monthItemHtml).join('')}</div>
+              </section>`;
+          })
+          .join('')}`;
+      return;
+    }
+
     const isCurrentWeek = ymd(state.weekStart) === ymd(startOfWeek(new Date()));
     if (state.density === 'agenda') {
       const upcoming = days.filter((d) => (!isCurrentWeek || d.key >= today) && d.groups.length > 0);
@@ -889,12 +1154,12 @@
     }
 
     if (isMovies || wizard.dismissed || state.shows.size > 0 || state.movies.size > 0) {
-      const heading = isMovies ? 'No movies tracked yet' : 'Your library is empty';
+      const heading = isMovies ? 'No movies scheduled yet' : 'Your calendar is empty';
       const body = isMovies
         ? tmdbReady
-          ? 'Search TMDB above to add specific movies, or scan this week’s Digital/Streaming, Physical, and TV movie premieres.'
-          : 'Add your optional TMDB API key in Settings → API Keys to enable movie search and weekly movie releases.'
-        : 'Search TVmaze & TMDB above to add titles one at a time, or re-open the setup wizard to bulk-import upcoming shows.';
+          ? 'Search TMDB above to add specific movies, or scan the next two weeks of Digital/Streaming, Physical, and TV movie releases.'
+          : 'Add your optional TMDB API key in Settings → API Keys to enable movie search and twice-monthly movie updates.'
+        : 'Search TVmaze & TMDB above to add titles one at a time, or re-open the setup wizard to import upcoming shows.';
       return `
         <div class="empty-state">
           <div class="big-icon">${ICON.tvBig}</div>
@@ -908,7 +1173,7 @@
             ${isMovies && !tmdbReady ? '<button class="btn" id="emptyApiKeyBtn" type="button">Add TMDB API key</button>' : ''}
             ${!isMovies ? '<button class="btn" id="emptyWizardBtn" type="button">Launch setup wizard</button>' : ''}
             <button class="btn btn-ghost" id="emptySearchBtn" type="button">${ICON.search} Search shows &amp; movies</button>
-            ${!isMovies || tmdbReady ? '<button class="btn btn-ghost" id="emptyScanBtn" type="button">' + ICON.check + ' Scan weekly premieres</button>' : ''}
+            ${!isMovies || tmdbReady ? '<button class="btn btn-ghost" id="emptyScanBtn" type="button">' + ICON.check + ' Sync next 2 weeks</button>' : ''}
           </div>
         </div>`;
     }
@@ -1044,7 +1309,7 @@
     $('#emptyScanBtn')?.addEventListener('click', async () => {
       try {
         await api('/api/discovery/run', { method: 'POST' });
-        toast(hasTmdbKey() ? 'Scanning TVmaze & TMDB for premieres…' : 'Scanning TVmaze for new premieres…', 'ok');
+        toast(hasTmdbKey() ? 'Scanning TVmaze & TMDB (next 2 weeks)…' : 'Scanning TVmaze (next 2 weeks)…', 'ok');
         pollStatus(true);
       } catch (err) {
         toast(err.message, 'err');
@@ -1220,7 +1485,7 @@
     const statusCls = /running|released/i.test(show.status) ? 'running' : /ended/i.test(show.status) ? 'ended' : 'tbd';
     const epArg = isMovie ? null : first;
     const { primary, isNew } = groupBadges(g);
-    const isAuto = show.source === 'auto-weekly';
+    const isHidden = Boolean(show.hidden);
     const extUrl = (det && !multi && det.episodeUrl) || (multi || isMovie ? show.url : first.url || show.url);
 
     $('#modalBody').innerHTML = `
@@ -1253,7 +1518,7 @@
           ${first.runtime || show.runtime ? `<span class="fact">${ICON.clock}${first.runtime || show.runtime} min</span>` : ''}
           ${show.rating ? `<span class="fact">${ICON.star}${show.rating}</span>` : ''}
           <span class="fact"><span class="status-dot ${statusCls}"></span>${esc(show.status || '')}</span>
-          ${isAuto ? '<span class="auto-pill">Weekly auto-pick</span>' : ''}
+          ${isHidden ? '<span class="hidden-pill">Hidden</span>' : ''}
           ${(show.genres || []).slice(0, 3).map((gr, idx) => {
             const hit = interestSet().has(gr);
             const bounce = hit && primary && (primary.cls === 'series-prem' || primary.cls === 'season-prem');
@@ -1281,7 +1546,11 @@
           <a class="btn btn-ghost" id="modalExtLink" href="${esc(extUrl)}" target="_blank" rel="noopener noreferrer">${ICON.ext} ${isMovie ? 'TMDB' : 'TVmaze'}</a>
           ${show.imdbUrl ? `<a class="btn btn-ghost" href="${esc(show.imdbUrl)}" target="_blank" rel="noopener noreferrer">${ICON.ext} IMDb</a>` : ''}
           ${show.officialSite ? `<a class="btn btn-ghost" href="${esc(show.officialSite)}" target="_blank" rel="noopener noreferrer">${ICON.globe} Official site</a>` : ''}
-          <button class="btn btn-danger" id="modalRemove" type="button">${isAuto ? `${ICON.close} Dismiss (not interested)` : `${ICON.trash} ${isMovie ? 'Remove movie' : 'Remove show'}`}</button>
+          ${
+            isHidden
+              ? `<button class="btn" id="modalUnhide" type="button">${ICON.eye} Unhide ${isMovie ? 'movie' : 'show'}</button>`
+              : `<button class="btn btn-danger" id="modalHide" type="button">${ICON.eyeOff} Hide ${isMovie ? 'movie' : 'show'}</button>`
+          }
         </div>
         <div class="m-ext-custom">
           <span>External search query: <b id="modalExtPreview">${esc(extSearchQuery(show, epArg))}</b></span>
@@ -1349,10 +1618,13 @@
       b.setAttribute('aria-pressed', String(fav));
       b.innerHTML = `${fav ? ICON.star : ICON.starOutline} <span>${fav ? 'Favorited' : 'Favorite'}</span>`;
     });
-    $('#modalRemove').addEventListener('click', async () => {
+    $('#modalHide')?.addEventListener('click', async () => {
       closeModal();
-      if (isAuto) await dismissItem(show.id, show.name, kind);
-      else await removeItem(show.id, show.name, kind);
+      await hideItem(show.id, show.name, kind);
+    });
+    $('#modalUnhide')?.addEventListener('click', async () => {
+      closeModal();
+      await unhideItem(show.id, show.name, kind);
     });
     $$('.fact-btn[data-genre]', $('#modalBody')).forEach((b) =>
       b.addEventListener('click', () => {
@@ -1382,7 +1654,7 @@
       return false;
     }
   }
-  function applyLocalRemoval(id, kind) {
+  function applyLocalHide(id, kind) {
     id = Number(id);
     if (kind === 'movie') {
       state.movies.delete(id);
@@ -1391,25 +1663,28 @@
       state.shows.delete(id);
       state.episodes = state.episodes.filter((e) => e.showId !== id);
     }
-    $('#showCount').textContent = state.shows.size;
-    $('#movieCount').textContent = state.movies.size;
+    $('#movieCount').textContent = [...state.movies.values()].filter((m) => !m.hidden).length;
     updateFavUi();
     populateGenres();
     renderCalendar();
-    renderTrashDrawer();
+    renderHiddenDrawer();
   }
 
-  async function removeItem(id, name, kind = 'show') {
+  async function hideItem(id, name, kind = 'show') {
     id = Number(id);
     const key = `${kind}:${id}`;
     if (pendingRemovals.has(key)) return;
     pendingRemovals.add(key);
     try {
       await api(kind === 'movie' ? `/api/movies/${id}` : `/api/shows/${id}`, { method: 'DELETE' });
-      applyLocalRemoval(id, kind);
-      await refreshTrash().catch(() => {});
+      if (state.settings && state.settings.showHidden) {
+        await reloadAll();
+      } else {
+        applyLocalHide(id, kind);
+        await refreshHidden().catch(() => {});
+      }
       pollStatus();
-      toast(`Moved ${name} to Trash`, 'ok', { label: 'Undo', onClick: () => restoreFromTrash(id, name, kind) });
+      toast(`Hid ${name}`, 'ok', { label: 'Undo', onClick: () => unhideItem(id, name, kind) });
     } catch (e) {
       toast(e.message, 'err');
     } finally {
@@ -1417,55 +1692,12 @@
     }
   }
 
-  async function dismissItem(id, name, kind = 'show') {
-    id = Number(id);
-    const key = `${kind}:${id}`;
-    if (pendingRemovals.has(key)) return;
-    pendingRemovals.add(key);
+  async function unhideItem(id, name, kind = 'show') {
     try {
-      const endpoint = kind === 'movie' ? `/api/movies/${id}/dismiss` : `/api/shows/${id}/dismiss`;
-      await api(endpoint, { method: 'POST', body: JSON.stringify({ name }) });
-      applyLocalRemoval(id, kind);
-      await refreshTrash().catch(() => {});
-      pollStatus();
-      toast(`Dismissed ${name} to Trash`, 'ok', { label: 'Undo', onClick: () => restoreFromTrash(id, name, kind) });
-    } catch (e) {
-      toast(e.message, 'err');
-    } finally {
-      pendingRemovals.delete(key);
-    }
-  }
-
-  async function restoreFromTrash(id, name, kind = 'show') {
-    try {
-      await api('/api/trash/restore', { method: 'POST', body: JSON.stringify({ id: Number(id), kind }) });
-      toast(`Restored ${name}`, 'ok');
+      await api('/api/hidden/restore', { method: 'POST', body: JSON.stringify({ id: Number(id), kind }) });
+      toast(`Unhid ${name}`, 'ok');
       await reloadAll();
       pollStatus();
-    } catch (e) {
-      toast(e.message, 'err');
-    }
-  }
-
-  async function purgeTrashItem(id, name, kind = 'show') {
-    try {
-      await api(`/api/trash/${kind === 'movie' ? 'movie' : 'show'}/${Number(id)}`, { method: 'DELETE' });
-      state.trash = state.trash.filter((x) => !(x.id === Number(id) && x.kind === kind));
-      updateTrashUi();
-      renderTrashDrawer();
-      toast(`Deleted ${name} permanently`, 'ok');
-    } catch (e) {
-      toast(e.message, 'err');
-    }
-  }
-
-  async function emptyTrash() {
-    try {
-      const res = await api('/api/trash/empty', { method: 'POST' });
-      state.trash = [];
-      updateTrashUi();
-      renderTrashDrawer();
-      toast(res.purged ? `Emptied Trash (${res.purged} deleted)` : 'Trash is already empty', 'ok');
     } catch (e) {
       toast(e.message, 'err');
     }
@@ -1536,7 +1768,7 @@
               </div>
               ${s.summary ? `<div class="sr-summary">${esc(stripHtml(s.summary))}</div>` : ''}
             </div>
-            <button class="add-btn${s.tracked ? ' tracked' : ''}" data-id="${s.id}" data-kind="${isMovie ? 'movie' : 'show'}" type="button">${s.tracked ? '✓ Tracking' : '+ Add'}</button>
+            <button class="add-btn${s.onCalendar ? ' on' : s.hidden ? ' is-hidden' : ''}" data-id="${s.id}" data-kind="${isMovie ? 'movie' : 'show'}" type="button">${s.onCalendar ? '✓ On calendar' : s.hidden ? 'Unhide' : '+ Add'}</button>
           </div>`;
           })
           .join('') + noteHtml;
@@ -1566,16 +1798,26 @@
     const kind = s.kind === 'movie' ? 'movie' : 'show';
     btn = btn || $(`.add-btn[data-id="${s.id}"][data-kind="${kind}"]`, searchResults);
     btn.disabled = true;
-    if (s.tracked) {
-      await removeItem(s.id, s.name, kind);
-      s.tracked = false;
+    if (s.onCalendar) {
+      await hideItem(s.id, s.name, kind);
+      s.onCalendar = false;
+      s.hidden = true;
+    } else if (s.hidden) {
+      btn.textContent = 'Unhiding…';
+      await unhideItem(s.id, s.name, kind);
+      s.onCalendar = true;
+      s.hidden = false;
     } else {
       btn.textContent = 'Adding…';
-      if (await addItem(s.id, s.name, kind)) s.tracked = true;
+      if (await addItem(s.id, s.name, kind)) {
+        s.onCalendar = true;
+        s.hidden = false;
+      }
     }
     btn.disabled = false;
-    btn.classList.toggle('tracked', s.tracked);
-    btn.textContent = s.tracked ? '✓ Tracking' : '+ Add';
+    btn.classList.toggle('on', Boolean(s.onCalendar));
+    btn.classList.toggle('is-hidden', Boolean(s.hidden && !s.onCalendar));
+    btn.textContent = s.onCalendar ? '✓ On calendar' : s.hidden ? 'Unhide' : '+ Add';
   }
 
   searchInput.addEventListener('input', () => {
@@ -1587,21 +1829,24 @@
     }
     searchTimer = setTimeout(() => doSearch(q), 280);
   });
-  function syncSearchTracked() {
+  function syncSearchState() {
     for (const s of searchItems) {
       const kind = s.kind === 'movie' ? 'movie' : 'show';
-      s.tracked = (kind === 'movie' ? state.movies : state.shows).has(s.id);
+      const entry = (kind === 'movie' ? state.movies : state.shows).get(s.id);
+      s.onCalendar = Boolean(entry && !entry.hidden);
+      s.hidden = Boolean((entry && entry.hidden) || state.hiddenItems.some((h) => h.id === s.id && h.kind === kind));
       const btn = $(`.add-btn[data-id="${s.id}"][data-kind="${kind}"]`, searchResults);
       if (btn) {
-        btn.classList.toggle('tracked', s.tracked);
-        btn.textContent = s.tracked ? '✓ Tracking' : '+ Add';
+        btn.classList.toggle('on', s.onCalendar);
+        btn.classList.toggle('is-hidden', s.hidden && !s.onCalendar);
+        btn.textContent = s.onCalendar ? '✓ On calendar' : s.hidden ? 'Unhide' : '+ Add';
       }
     }
   }
 
   searchInput.addEventListener('focus', () => {
     if (searchInput.value.trim().length >= 2 && searchResults.innerHTML) {
-      syncSearchTracked();
+      syncSearchState();
       searchResults.hidden = false;
     }
   });
@@ -1629,22 +1874,24 @@
     if (!e.target.closest('#searchBox')) searchResults.hidden = true;
   });
 
-  // ---------- Settings & Trash drawer ----------
+  // ---------- Settings & Hidden drawer ----------
   function setDrawerTab(tab) {
-    const next = tab === 'trash' ? 'trash' : 'settings';
+    const next = tab === 'hidden' ? 'hidden' : 'settings';
     state.drawerMedia = next;
     $$('#drawerMediaSeg button').forEach((x) => x.classList.toggle('on', x.dataset.value === next));
-    $('#drawer').classList.toggle('drawer-in-trash', next === 'trash');
-    updateTrashUi();
-    renderTrashDrawer();
+    $('#drawer').classList.toggle('drawer-in-hidden', next === 'hidden');
+    updateHiddenUi();
+    renderHiddenDrawer();
   }
 
   function openDrawer(tab = null) {
     $('#drawer').classList.add('open');
     $('#drawer').setAttribute('aria-hidden', 'false');
     $('#drawerScrim').hidden = false;
+    renderThemeSettings(state.settings);
     renderApiKeysSettings(state.settings);
     renderInterestsSettings();
+    renderHiddenSettings(state.settings);
     renderExtSettings(state.settings);
     if (state.status) {
       renderDiscovery(state.status.discovery, state.status.movieDiscovery);
@@ -1672,8 +1919,8 @@
     return `${days}d ago`;
   }
 
-  function renderTrashList(list, q) {
-    let items = [...state.trash];
+  function renderHiddenList(list, q) {
+    let items = [...state.hiddenItems];
     if (q) {
       items = items.filter(
         (x) =>
@@ -1682,12 +1929,13 @@
           (x.kind || '').toLowerCase().includes(q)
       );
     }
-    $('#drawerSub').textContent = `${state.trash.length} deleted item${state.trash.length === 1 ? '' : 's'} · Restore any time`;
+    $('#drawerSub').textContent = `${state.hiddenItems.length} hidden item${state.hiddenItems.length === 1 ? '' : 's'} · Skipped by updates`;
     if (!items.length) {
-      list.innerHTML = `<li class="sr-empty">${state.trash.length ? 'No matching items in Trash' : 'Trash can is empty. Removed or dismissed shows appear here so you can restore them anytime.'}</li>`;
+      list.innerHTML = `<li class="sr-empty">${state.hiddenItems.length ? 'No matching hidden items' : 'No hidden shows or movies yet. Hide any title from the calendar to keep it out of future TVmaze &amp; TMDB updates.'}</li>`;
       return;
     }
     list.innerHTML = items
+      .slice(0, 200)
       .map((x) => {
         const isMovie = x.kind === 'movie';
         const thumb = isMovie && x.background
@@ -1700,72 +1948,64 @@
           ? `<img class="poster" src="${esc(x.poster)}" alt="" loading="lazy">`
           : '';
         const srcName = x.channelName || (isMovie ? 'Movie' : 'TV');
-        const when = relAgo(x.trashedAt);
-        const why = x.reason === 'dismissed' ? 'Dismissed' : 'Removed';
+        const when = relAgo(x.hiddenAt);
         return `
-        <li class="show-item trash-item">
+        <li class="show-item hidden-item">
           <div class="show-thumb" style="background:${brandColor(srcName)}33">${thumb}</div>
           <div style="min-width:0">
             <div class="show-name" title="${esc(x.name)}">${esc(x.name)}</div>
             <div class="show-meta">
-              <span class="imp-pill ${isMovie ? 'movie-tag' : 'tracked'}">${isMovie ? 'Movie' : 'Show'}</span>
+              <span class="ev-pill ${isMovie ? 'movie' : 'special'}">${isMovie ? 'Movie' : 'TV Show'}</span>
               ${x.channelName ? srcBadge(x.channelName, x.channelKind || 'tv') : ''}
-              ${x.favorite ? `<span class="fav-ind" title="Was favorited">${ICON.star}</span>` : ''}
+              ${x.favorite ? `<span class="fav-ind" title="Favorited">${ICON.star}</span>` : ''}
             </div>
-            <div class="show-next">${why}${when ? ` · ${esc(when)}` : ''}</div>
+            <div class="show-next">Hidden${when ? ` · ${esc(when)}` : ''}</div>
           </div>
-          <div class="show-actions trash-actions">
-            <button class="restore-btn" type="button" data-trash-restore="${x.id}" data-kind="${x.kind}" data-name="${esc(x.name)}" title="Restore ${esc(x.name)} back to your list">${ICON.restore}<span>Restore</span></button>
-            <button class="mini-btn danger" type="button" data-trash-purge="${x.id}" data-kind="${x.kind}" data-name="${esc(x.name)}" title="Delete forever">${ICON.close}</button>
+          <div class="show-actions hidden-actions">
+            <button class="restore-btn" type="button" data-hidden-unhide="${x.id}" data-kind="${x.kind}" data-name="${esc(x.name)}" title="Unhide ${esc(x.name)}">${ICON.eye}<span>Unhide</span></button>
           </div>
         </li>`;
       })
-      .join('');
+      .join('') + (items.length > 200 ? `<li class="sr-empty">Showing first 200 of ${items.length} hidden items — type above to filter.</li>` : '');
   }
 
-  function renderTrashDrawer() {
+  function renderHiddenDrawer() {
     if (!$('#drawer').classList.contains('open')) return;
-    $('#drawer').classList.toggle('drawer-in-trash', state.drawerMedia === 'trash');
-    updateTrashUi();
+    $('#drawer').classList.toggle('drawer-in-hidden', state.drawerMedia === 'hidden');
+    updateHiddenUi();
     const list = $('#showList');
-    if (state.drawerMedia !== 'trash') {
+    if (state.drawerMedia !== 'hidden') {
       list.innerHTML = '';
-      $('#drawerSub').textContent = `${state.shows.size} show${state.shows.size === 1 ? '' : 's'} · ${state.movies.size} movie${state.movies.size === 1 ? '' : 's'}`;
+      const activeShowCount = [...state.shows.values()].filter((s) => !s.hidden).length;
+      const activeMovieCount = [...state.movies.values()].filter((m) => !m.hidden).length;
+      $('#drawerSub').textContent = `${activeShowCount} show${activeShowCount === 1 ? '' : 's'} · ${activeMovieCount} movie${activeMovieCount === 1 ? '' : 's'} · ${state.hiddenItems.length} hidden`;
       return;
     }
     const q = $('#showFilter').value.trim().toLowerCase();
-    renderTrashList(list, q);
+    renderHiddenList(list, q);
   }
 
   $('#showList').addEventListener('click', async (e) => {
-    const trRestore = e.target.closest('[data-trash-restore]');
-    if (trRestore) {
-      if (trRestore.disabled) return;
-      trRestore.disabled = true;
-      await restoreFromTrash(Number(trRestore.dataset.trashRestore), trRestore.dataset.name || 'item', trRestore.dataset.kind || 'show');
-      return;
-    }
-    const trPurge = e.target.closest('[data-trash-purge]');
-    if (trPurge) {
-      if (trPurge.disabled) return;
-      trPurge.disabled = true;
-      await purgeTrashItem(Number(trPurge.dataset.trashPurge), trPurge.dataset.name || 'item', trPurge.dataset.kind || 'show');
+    const unhideBtn = e.target.closest('[data-hidden-unhide]');
+    if (unhideBtn) {
+      if (unhideBtn.disabled) return;
+      unhideBtn.disabled = true;
+      await unhideItem(Number(unhideBtn.dataset.hiddenUnhide), unhideBtn.dataset.name || 'item', unhideBtn.dataset.kind || 'show');
     }
   });
   $$('#drawerMediaSeg button').forEach((b) =>
     b.addEventListener('click', () => setDrawerTab(b.dataset.value))
   );
-  $('#showFilter').addEventListener('input', renderTrashDrawer);
+  $('#showFilter').addEventListener('input', renderHiddenDrawer);
   $('#myShowsBtn').addEventListener('click', () => openDrawer('settings'));
-  $('#trashTopBtn').addEventListener('click', () => openDrawer('trash'));
-  $('#emptyTrashBtn').addEventListener('click', emptyTrash);
+  $('#hiddenTopBtn').addEventListener('click', () => openDrawer('hidden'));
   $('#drawerClose').addEventListener('click', closeDrawer);
   $('#drawerScrim').addEventListener('click', closeDrawer);
 
   // ---------- Sync & settings ----------
   $('#refreshBtn').addEventListener('click', async () => {
     await api('/api/refresh', { method: 'POST' });
-    toast('Refreshing all shows from TVmaze…', 'ok');
+    toast('Refreshing TVmaze & TMDB (including next 2 weeks)…', 'ok');
     pollStatus(true);
   });
 
@@ -1788,21 +2028,26 @@
 
       const pill = $('#syncPill');
       pill.hidden = !busy;
-      if (disc && disc.running) $('#syncText').textContent = `New shows ${disc.done}/${disc.total || '…'}`;
-      else if (mdisc && mdisc.running) $('#syncText').textContent = `New movies ${mdisc.done}/${mdisc.total || '…'}`;
+      if (disc && disc.running) $('#syncText').textContent = `Syncing shows ${disc.done}/${disc.total || '…'}`;
+      else if (mdisc && mdisc.running) $('#syncText').textContent = `Syncing movies ${mdisc.done}/${mdisc.total || '…'}`;
       else if (sync.running) $('#syncText').textContent = `Updating ${sync.done}/${sync.total}`;
 
       const prevExtUrl = state.settings.extSearchUrl;
       const prevInterests = JSON.stringify(state.settings.interests || []);
       const prevKeys = JSON.stringify(state.settings.apiKeys || {});
-      if (st.settings) state.settings = { extSearchUrl: '', interests: [], apiKeys: {}, ...st.settings };
+      const prevShowHidden = Boolean(state.settings.showHidden);
+      syncSettingsFromServer(st.settings, false);
       if (state.status && $('#drawer').classList.contains('open')) {
+        renderThemeSettings(state.settings);
         renderApiKeysSettings(state.settings);
         renderInterestsSettings();
+        renderHiddenSettings(state.settings);
         renderDiscovery(disc, mdisc);
         renderExtSettings(state.settings);
       }
-      if (
+      if (Boolean(state.settings.showHidden) !== prevShowHidden && state.showsLoaded) {
+        await reloadAll();
+      } else if (
         (state.settings.extSearchUrl !== prevExtUrl ||
           JSON.stringify(state.settings.interests || []) !== prevInterests ||
           JSON.stringify(state.settings.apiKeys || {}) !== prevKeys) &&
@@ -1811,11 +2056,11 @@
       ) {
         renderCalendar();
       }
-      if (state.showsLoaded && typeof st.trashCount === 'number' && st.trashCount !== state.trash.length) {
-        refreshTrash().catch(() => {});
+      if (state.showsLoaded && typeof st.hiddenCount === 'number' && st.hiddenCount !== state.hiddenItems.length) {
+        refreshHidden().catch(() => {});
       }
 
-      const progress = `${sync.done}:${disc ? disc.done : 0}:${mdisc ? mdisc.done : 0}:${st.tracked}:${st.moviesCount || 0}`;
+      const progress = `${sync.done}:${disc ? disc.done : 0}:${mdisc ? mdisc.done : 0}:${st.showCount || 0}:${st.moviesCount || 0}`;
       if (busy && progress !== lastProgress && Date.now() - lastReload > 3000) {
         lastProgress = progress;
         lastReload = Date.now();
@@ -1825,7 +2070,7 @@
         if ((disc && disc.finishedAt && Date.now() - disc.finishedAt < 15000) || (mdisc && mdisc.finishedAt && Date.now() - mdisc.finishedAt < 15000)) {
           const tvN = (disc && disc.added && disc.added.length) || 0;
           const mvN = (mdisc && mdisc.added && mdisc.added.length) || 0;
-          toast(`Discovery done: ${tvN} show${tvN === 1 ? '' : 's'}, ${mvN} movie${mvN === 1 ? '' : 's'} added`, 'ok');
+          toast(`Sync complete: ${tvN} show${tvN === 1 ? '' : 's'}, ${mvN} movie${mvN === 1 ? '' : 's'} added`, 'ok');
         }
       } else if (state.showsLoaded && state.shows.size === 0 && state.movies.size === 0 && state.loaded) {
         renderCalendar(); // refresh empty-state scan progress
@@ -1840,6 +2085,56 @@
     if (document.hidden) clearTimeout(pollTimer);
     else pollStatus();
   });
+
+  function renderThemeSettings(settings) {
+    const box = $('#themeSettingsBox');
+    if (!box) return;
+    const activeId = normalizeTheme((settings && settings.style) || store.get('style', 'midnight'));
+    const cur = THEMES.find((t) => t.id === activeId) || THEMES[0];
+    box.hidden = false;
+    box.innerHTML = `
+      <div class="api-keys-head">
+        <span class="lan-label">Visual Style (10 Themes)</span>
+        <span class="api-key-badge muted">${esc(cur.name)} · ${esc(cur.mode)}</span>
+      </div>
+      <div class="theme-grid">
+        ${THEMES.map((t) => {
+          const on = t.id === activeId;
+          return `
+            <button type="button" class="theme-card${on ? ' active' : ''}" data-theme-pick="${t.id}" aria-pressed="${on}">
+              <div class="theme-swatches" style="background:${t.swatches[0]}">
+                <span class="theme-swatch-dot" style="background:${t.swatches[1]}"></span>
+                <span class="theme-swatch-dot" style="background:${t.swatches[2]}"></span>
+                <span class="theme-swatch-dot" style="background:${t.swatches[3]}"></span>
+                <span class="theme-mode-tag" style="color:${t.mode === 'Light' ? '#111' : '#fff'}">${esc(t.mode)}</span>
+              </div>
+              <div class="theme-card-name">${esc(t.name)}</div>
+              <div class="theme-card-sub">${esc(t.motif)}</div>
+            </button>`;
+        }).join('')}
+      </div>`;
+    $$('[data-theme-pick]', box).forEach((b) =>
+      b.addEventListener('click', async () => {
+        const prev = activeId;
+        const next = applyTheme(b.dataset.themePick);
+        state.settings = { ...state.settings, style: next };
+        renderThemeSettings(state.settings);
+        const picked = THEMES.find((t) => t.id === next);
+        themeSaveInflight++;
+        try {
+          state.settings = await api('/api/settings', { method: 'POST', body: JSON.stringify({ style: next }) });
+          if (picked) toast(`Style switched to ${picked.name} (${picked.mode})`, 'ok', { key: 'theme' });
+        } catch (err) {
+          applyTheme(prev);
+          state.settings = { ...state.settings, style: prev };
+          renderThemeSettings(state.settings);
+          toast(err.message, 'err');
+        } finally {
+          themeSaveInflight--;
+        }
+      })
+    );
+  }
 
   function renderApiKeysSettings(settings) {
     const box = $('#apiKeysBox');
@@ -1984,6 +2279,47 @@
     if (clr) clr.addEventListener('click', () => saveInterests([]));
   }
 
+  const SYNC_LANGUAGES = ['English', 'Spanish', 'French', 'German', 'Japanese', 'Korean', 'Swedish', 'Norwegian', 'Danish', 'Finnish', 'Dutch', 'Italian', 'Portuguese', 'Polish'];
+
+  function renderHiddenSettings(settings) {
+    const box = $('#hiddenSettingsBox');
+    if (!box) return;
+    const showHidden = Boolean(settings && settings.showHidden);
+    const hiddenTotal = state.hiddenItems.length;
+    box.hidden = false;
+    box.innerHTML = `
+      <div class="disc-row">
+        <label class="disc-title" for="showHiddenToggle">
+          <span>Show hidden items (25% opacity)</span>
+        </label>
+        <label class="switch" title="Show hidden shows &amp; movies inline on your calendar at 25% opacity">
+          <input id="showHiddenToggle" type="checkbox"${showHidden ? ' checked' : ''} />
+          <span class="switch-track"></span>
+        </label>
+      </div>
+      <div class="disc-sub">
+        <span>${hiddenTotal} hidden item${hiddenTotal === 1 ? '' : 's'} stay skipped during TVmaze &amp; TMDB updates.</span>
+        <button type="button" class="mini-text-btn muted-btn" id="openHiddenTabBtn">Manage</button>
+      </div>`;
+    $('#openHiddenTabBtn', box).addEventListener('click', () => setDrawerTab('hidden'));
+    $('#showHiddenToggle', box).addEventListener('change', async (e) => {
+      const nextVal = Boolean(e.target.checked);
+      const prevVal = Boolean(state.settings.showHidden);
+      state.settings = { ...state.settings, showHidden: nextVal };
+      try {
+        const saved = await api('/api/settings', { method: 'POST', body: JSON.stringify({ showHidden: nextVal }) });
+        syncSettingsFromServer(saved, false);
+        renderHiddenSettings(state.settings);
+        await reloadAll();
+        toast(nextVal ? 'Hidden items shown at 25% opacity' : 'Hidden items concealed from calendar', 'ok');
+      } catch (err) {
+        state.settings = { ...state.settings, showHidden: prevVal };
+        renderHiddenSettings(state.settings);
+        toast(err.message, 'err');
+      }
+    });
+  }
+
   function renderDiscovery(disc, mdisc = state.status && state.status.movieDiscovery) {
     const box = $('#discoveryBox');
     if (!disc) {
@@ -1997,15 +2333,22 @@
     const done = disc.running ? disc.done : mdisc && mdisc.running ? mdisc.done : 0;
     const total = disc.running ? disc.total : mdisc && mdisc.running ? mdisc.total : 0;
     const curName = disc.running ? disc.current : mdisc && mdisc.running ? mdisc.current : '';
-    const rules = disc.rules || { englishOnly: false, scriptedOnly: false, minWeight: 0, genres: [] };
+    const rules = disc.rules || { languages: [], englishOnly: false, scriptedOnly: false, minWeight: 0, genres: [] };
+    const langs = Array.isArray(rules.languages) && rules.languages.length
+      ? rules.languages
+      : rules.englishOnly
+        ? ['English']
+        : [];
+    const langPool = [...new Set([...SYNC_LANGUAGES, ...langs])];
     const pct = running && total ? Math.round((done / total) * 100) : 0;
+    const periodLabel = disc.lastPeriod || (mdisc && mdisc.lastPeriod);
     const sub = running
       ? `Scanning: <b>${done}/${total || '?'}</b>${curName ? ` — ${esc(curName)}` : ''}`
-      : disc.lastWeek || (mdisc && mdisc.lastWeek)
-      ? `${esc(disc.lastWeek || mdisc.lastWeek)}: <span class="disc-pick">${batch.length} show${batch.length === 1 ? '' : 's'}</span> · <span class="disc-pick">${mbatch.length} movie${mbatch.length === 1 ? '' : 's'}</span>`
-      : 'Adds new TV premieres &amp; streaming, TV, or physical movies once / week';
+      : periodLabel
+      ? `Last sync (${esc(periodLabel)}): <span class="disc-pick">${batch.length} show${batch.length === 1 ? '' : 's'}</span> · <span class="disc-pick">${mbatch.length} movie${mbatch.length === 1 ? '' : 's'}</span>`
+      : 'Scans TVmaze &amp; TMDB twice / month (2 weeks ahead); skips Hidden';
     const ruleSummary = [
-      rules.englishOnly ? 'English' : null,
+      langs.length ? langs.join(', ') : 'All languages',
       rules.scriptedOnly ? 'Scripted/Anim' : null,
       rules.minWeight > 0 ? `weight ≥ ${rules.minWeight}` : null,
       rules.genres && rules.genres.length ? `${rules.genres.length} genre${rules.genres.length === 1 ? '' : 's'}` : null,
@@ -2014,27 +2357,25 @@
     box.innerHTML = `
       <div class="disc-row">
         <label class="disc-title" for="discoveryToggle">
-          <span class="auto-pill">Auto</span>
-          <span>Add new shows &amp; movies once / week</span>
+          <span>Twice-monthly TVmaze &amp; TMDB sync</span>
         </label>
-        <label class="switch" title="Automatically add brand-new TV shows &amp; movies once per week">
+        <label class="switch" title="Automatically scan TVmaze &amp; TMDB twice a month looking 2 weeks ahead (never re-adds Hidden items)">
           <input id="discoveryToggle" type="checkbox"${disc.enabled ? ' checked' : ''} />
           <span class="switch-track"></span>
         </label>
       </div>
       <div class="disc-sub">
         <span>${sub}</span>
-        <button id="discoveryRunBtn" class="btn btn-small btn-ghost" type="button"${running ? ' disabled' : ''}>${running ? 'Adding…' : 'Check now'}</button>
+        <button id="discoveryRunBtn" class="btn btn-small btn-ghost" type="button"${running ? ' disabled' : ''}>${running ? 'Syncing…' : 'Sync now'}</button>
       </div>
       ${running ? `<div class="progress" style="margin-top:8px"><i style="width:${pct}%"></i></div>` : ''}
       ${!running && mdisc && mdisc.error ? `<div class="disc-err">${esc(mdisc.error)}</div>` : ''}
-      ${!running && (batch.length || mbatch.length) ? `<details class="disc-list"><summary>Added this week (${batch.length} shows, ${mbatch.length} movies)</summary>${batch.length ? `<div><b>Shows:</b> ${esc(batch.map((b) => b.name).join(', '))}</div>` : ''}${mbatch.length ? `<div style="margin-top:4px"><b>Movies:</b> ${esc(mbatch.map((b) => b.name).join(', '))}</div>` : ''}</details>` : ''}
+      ${!running && (batch.length || mbatch.length) ? `<details class="disc-list"><summary>Added in latest sync (${batch.length} shows, ${mbatch.length} movies)</summary>${batch.length ? `<div><b>Shows:</b> ${esc(batch.map((b) => b.name).join(', '))}</div>` : ''}${mbatch.length ? `<div style="margin-top:4px"><b>Movies:</b> ${esc(mbatch.map((b) => b.name).join(', '))}</div>` : ''}</details>` : ''}
       <details class="disc-rules"${discRulesOpen ? ' open' : ''}>
-        <summary>Discovery filters: ${ruleSummary.length ? esc(ruleSummary.join(' · ')) : 'All premieres'}</summary>
+        <summary>Sync filters: ${esc(ruleSummary.join(' · '))}</summary>
         <div class="disc-rules-body">
           <div class="disc-checks">
-            <label><input type="checkbox" id="ruleEnglish"${rules.englishOnly ? ' checked' : ''} /> English only</label>
-            <label><input type="checkbox" id="ruleScripted"${rules.scriptedOnly ? ' checked' : ''} /> Scripted / Animation</label>
+            <label><input type="checkbox" id="ruleScripted"${rules.scriptedOnly ? ' checked' : ''} /> Scripted / Animation only</label>
           </div>
           <div class="disc-row-inline">
             <span>Min popularity</span>
@@ -2045,8 +2386,17 @@
               <option value="90"${rules.minWeight === 90 ? ' selected' : ''}>Top (90+)</option>
             </select>
           </div>
-          <div class="genre-chips">
-            ${DISC_GENRES.map((g) => `<button type="button" class="gchip${(rules.genres || []).includes(g) ? ' on' : ''}" data-dg="${esc(g)}">${esc(g)}</button>`).join('')}
+          <div>
+            <div class="lan-label" style="margin-bottom:4px">Languages ${langs.length ? `<button type="button" class="mini-text-btn muted-btn" id="clearSyncLangsBtn" style="margin-left:6px">All</button>` : '<span class="muted" style="text-transform:none">(All)</span>'}</div>
+            <div class="disc-langs">
+              ${langPool.map((l) => `<button type="button" class="gchip${langs.includes(l) ? ' on' : ''}" data-dl="${esc(l)}">${esc(l)}</button>`).join('')}
+            </div>
+          </div>
+          <div>
+            <div class="lan-label" style="margin-bottom:4px">Genres ${rules.genres && rules.genres.length ? '' : '<span class="muted" style="text-transform:none">(Any)</span>'}</div>
+            <div class="genre-chips">
+              ${DISC_GENRES.map((g) => `<button type="button" class="gchip${(rules.genres || []).includes(g) ? ' on' : ''}" data-dg="${esc(g)}">${esc(g)}</button>`).join('')}
+            </div>
           </div>
         </div>
       </details>`;
@@ -2061,10 +2411,19 @@
         toast(err.message, 'err');
       }
     };
-    $('#ruleEnglish', box).addEventListener('change', (e) => saveRules({ englishOnly: e.target.checked }));
     $('#ruleScripted', box).addEventListener('change', (e) => saveRules({ scriptedOnly: e.target.checked }));
     $('#ruleMinWeight', box).addEventListener('change', (e) => saveRules({ minWeight: Number(e.target.value) }));
-    $$('.gchip', box).forEach((b) =>
+    $('#clearSyncLangsBtn', box)?.addEventListener('click', () => saveRules({ languages: [] }));
+    $$('[data-dl]', box).forEach((b) =>
+      b.addEventListener('click', () => {
+        const lang = b.dataset.dl;
+        const cur = new Set(langs);
+        if (cur.has(lang)) cur.delete(lang);
+        else cur.add(lang);
+        saveRules({ languages: [...cur] });
+      })
+    );
+    $$('[data-dg]', box).forEach((b) =>
       b.addEventListener('click', () => {
         const g = b.dataset.dg;
         const cur = new Set(rules.genres || []);
@@ -2076,7 +2435,7 @@
     $('#discoveryToggle', box).addEventListener('change', async (e) => {
       try {
         const next = await api('/api/discovery/toggle', { method: 'POST', body: JSON.stringify({ enabled: e.target.checked }) });
-        toast(next.enabled ? 'Weekly new-show discovery enabled' : 'Weekly auto-discovery paused', 'ok');
+        toast(next.enabled ? 'Twice-monthly auto-sync enabled' : 'Twice-monthly auto-sync paused', 'ok');
         pollStatus(true);
       } catch (err) {
         toast(err.message, 'err');
@@ -2085,7 +2444,7 @@
     $('#discoveryRunBtn', box).addEventListener('click', async () => {
       try {
         await api('/api/discovery/run', { method: 'POST' });
-        toast('Checking TVmaze for new premieres…', 'ok');
+        toast('Scanning TVmaze & TMDB (next 2 weeks)…', 'ok');
         pollStatus(true);
       } catch (err) {
         toast(err.message, 'err');
@@ -2139,8 +2498,14 @@
 
   // ---------- Toasts ----------
   function toast(msg, type = 'ok', action = null) {
+    if (action && action.key) {
+      $$('#toasts .toast').forEach((t) => {
+        if (t.dataset.tkey === action.key) t.remove();
+      });
+    }
     const el = document.createElement('div');
     el.className = `toast ${type}`;
+    if (action && action.key) el.dataset.tkey = action.key;
     el.innerHTML = `${type === 'err' ? ICON.alert : ICON.check}<span>${esc(msg)}</span>`;
     if (action && action.label) {
       const btn = document.createElement('button');
@@ -2160,7 +2525,7 @@
       el.style.opacity = '0';
       el.style.transform = 'translateY(6px)';
       setTimeout(() => el.remove(), 300);
-    }, action ? 5500 : 3200);
+    }, action && action.label ? 5500 : 3200);
   }
 
   // ---------- Segmented controls ----------
@@ -2184,7 +2549,33 @@
   });
   bindSeg('#filterSeg', 'filter', renderCalendar);
   bindSeg('#timeSeg', 'timeMode', renderCalendar);
-  bindSeg('#densitySeg', 'density', renderCalendar);
+  {
+    const seg = $('#densitySeg');
+    const sync = () => $$('button', seg).forEach((b) => b.classList.toggle('on', b.dataset.value === state.density));
+    sync();
+    seg.addEventListener('click', (e) => {
+      const b = e.target.closest('button');
+      if (!b || b.dataset.value === state.density) return;
+      const prev = state.density;
+      state.density = b.dataset.value;
+      store.set('density', state.density);
+      sync();
+      if (state.density === 'day' || state.density === 'month' || prev === 'day' || prev === 'month') {
+        loadWeek().catch((err) => toast(err.message, 'err'));
+      } else {
+        renderCalendar();
+      }
+    });
+  }
+
+  function openDayView(dateStr) {
+    state.focusDate = dateStr;
+    state.weekStart = startOfWeek(new Date(dateStr + 'T12:00:00'));
+    state.density = 'day';
+    store.set('density', 'day');
+    $$('#densitySeg button').forEach((b) => b.classList.toggle('on', b.dataset.value === 'day'));
+    loadWeek().catch((e) => toast(e.message, 'err'));
+  }
 
   function setGenre(g) {
     state.genre = g || '';
@@ -2203,9 +2594,27 @@
   }
   $('#favFilterBtn').addEventListener('click', toggleFavFilter);
 
-  // ---------- Week navigation & Month picker ----------
+  // ---------- Period navigation & Month picker ----------
   function shiftWeek(n) {
-    state.weekStart = n === 0 ? startOfWeek(new Date()) : addDays(state.weekStart, 7 * n);
+    const todayStr = ymd(new Date());
+    if (n === 0) {
+      const now = new Date();
+      state.focusDate = ymd(now);
+      state.weekStart = startOfWeek(now);
+    } else if (state.density === 'day') {
+      const d = addDays(new Date(state.focusDate + 'T12:00:00'), n);
+      state.focusDate = ymd(d);
+      state.weekStart = startOfWeek(d);
+    } else if (state.density === 'month') {
+      const cur = new Date(state.focusDate + 'T12:00:00');
+      const d = new Date(cur.getFullYear(), cur.getMonth() + n, 1);
+      state.focusDate = ymd(d).slice(0, 7) === todayStr.slice(0, 7) ? todayStr : ymd(d);
+      state.weekStart = startOfWeek(new Date(state.focusDate + 'T12:00:00'));
+    } else {
+      state.weekStart = addDays(state.weekStart, 7 * n);
+      const endStr = ymd(addDays(state.weekStart, 6));
+      state.focusDate = todayStr >= ymd(state.weekStart) && todayStr <= endStr ? todayStr : ymd(state.weekStart);
+    }
     loadWeek().catch((e) => toast(e.message, 'err'));
   }
   $('#prevWeek').addEventListener('click', () => shiftWeek(-1));
@@ -2270,6 +2679,7 @@
     });
     $$('[data-jump]', mp).forEach((b) =>
       b.addEventListener('click', () => {
+        state.focusDate = b.dataset.jump;
         state.weekStart = startOfWeek(new Date(b.dataset.jump + 'T12:00:00'));
         mp.hidden = true;
         $('#weekPickerBtn').setAttribute('aria-expanded', 'false');
@@ -2283,7 +2693,8 @@
     mp.hidden = !open;
     $('#weekPickerBtn').setAttribute('aria-expanded', String(open));
     if (open) {
-      mpMonth = new Date(state.weekStart.getFullYear(), state.weekStart.getMonth(), 1);
+      const ref = state.density === 'day' || state.density === 'month' ? new Date(state.focusDate + 'T12:00:00') : state.weekStart;
+      mpMonth = new Date(ref.getFullYear(), ref.getMonth(), 1);
       renderMonthPicker();
     }
   });
@@ -2302,17 +2713,26 @@
 
   // ---------- Calendar interactions ----------
   $('#calendar').addEventListener('click', (e) => {
-    const dis = e.target.closest('[data-dismiss], [data-remove-card]');
-    if (dis) {
-      const key = dis.closest('[data-key]')?.dataset.key;
+    const unhideBtn = e.target.closest('[data-unhide]');
+    if (unhideBtn) {
+      const key = unhideBtn.closest('[data-key]')?.dataset.key;
       const g = key ? state.groups.get(key) : null;
-      const isDis = Boolean(dis.dataset.dismiss);
-      const id = Number(dis.dataset.dismiss || dis.dataset.removeCard);
-      const kind = dis.dataset.kind || 'show';
+      const id = Number(unhideBtn.dataset.unhide);
+      const kind = unhideBtn.dataset.kind || 'show';
       const item = (kind === 'movie' ? state.movies : state.shows).get(id);
       const name = (g && g.show.name) || (item && item.name) || kind;
-      if (isDis) dismissItem(id, name, kind);
-      else removeItem(id, name, kind);
+      unhideItem(id, name, kind);
+      return;
+    }
+    const hideBtn = e.target.closest('[data-hide-card]');
+    if (hideBtn) {
+      const key = hideBtn.closest('[data-key]')?.dataset.key;
+      const g = key ? state.groups.get(key) : null;
+      const id = Number(hideBtn.dataset.hideCard);
+      const kind = hideBtn.dataset.kind || 'show';
+      const item = (kind === 'movie' ? state.movies : state.shows).get(id);
+      const name = (g && g.show.name) || (item && item.name) || kind;
+      hideItem(id, name, kind);
       return;
     }
     const fav = e.target.closest('[data-fav]');
@@ -2320,12 +2740,17 @@
       toggleFavorite(Number(fav.dataset.fav), fav.dataset.kind || 'show');
       return;
     }
+    const jumpDay = e.target.closest('[data-jump-day]');
+    if (jumpDay) {
+      openDayView(jumpDay.dataset.jumpDay);
+      return;
+    }
     if (e.target.closest('[data-stop]')) return; // External Search link opens normally
-    const card = e.target.closest('.ep, .agenda-row');
+    const card = e.target.closest('.ep, .agenda-row, .day-card, .m-ev');
     if (card) openModal(card.dataset.key);
   });
   $('#calendar').addEventListener('keydown', (e) => {
-    if (e.key === 'Enter' && (e.target.classList.contains('ep') || e.target.classList.contains('agenda-row'))) openModal(e.target.dataset.key);
+    if (e.key === 'Enter' && e.target.matches('.ep, .agenda-row, .day-card, .m-ev')) openModal(e.target.dataset.key);
   });
   $('#modal').addEventListener('click', (e) => {
     if (e.target.closest('[data-close]')) closeModal();

@@ -5,15 +5,16 @@ A lightweight Node.js (zero-dependency) weekly TV show and movie calendar powere
 ## Features
 
 - **First-Start Setup Wizard**: Clean two-step onboarding lets you configure optional API keys and bulk-import upcoming shows (Monday of the current week up to 2 months ahead) filtered by multiple languages and genres.
-- **Weekly Calendar Grid**: Shows every episode and movie release airing Monday–Sunday with artwork/title fallback, episode code & name, air time (toggle between your local timezone and original network time), and TV/streaming/physical source badges.
+- **Five Calendar Views**: Switch cleanly via the icon-only view selector between **Day** (full open episode/movie descriptions), **Cards**, **Compact**, **Month** (compact show names & labels), and **Up Next** (today & upcoming agenda), plus a **Month Picker** calendar jumper.
+- **10 Visual Themes**: Choose from 10 distinct dark & light styles inside **Settings** (Midnight, Grand Bistro, Departure Board, Silver Screen, Broadsheet, Blueprint, Swiss Atelier, Cyber Arcade, Greenhouse, and Comic Press).
 - **TVmaze & TMDB Integration**: Uses show branding, channel/streaming colors, episode schedules, and movie release data (`Digital/Streaming`, `Physical`, and `TV Premiere`).
 - **API Keys Settings**: Configure your TMDB API key (v3 key or v4 Read Access Token, required for movie search and movie discovery) and optional TVmaze API key directly inside **Settings → API Keys**.
-- **Search & Add**: Live TVmaze & TMDB search bar (`/` shortcut) to add or remove shows and movies at any time.
-- **Movies Mode (TMDB)**: Toggle **Shows | Both | Movies** to browse brand-new movies released on Digital/Streaming, Physical media, or TV from TMDB, automatically discovered once per week inheriting discovery filters, favorites, genres, and External Search links.
-- **Weekly Auto-Discovery**: Once per week, automatically scans TVmaze (`S01E01` premieres) and TMDB (new movie releases) with customizable discovery filters (English-only, Scripted/Animation, min popularity, and genres) inside **Settings**.
-- **Trash Can & Restore**: Removed or dismissed items stay recoverable in **Trash** without losing favorites or custom External Search queries.
-- **Favorites & My Interests**: Star shows/movies (`F` shortcut) and highlight selected **My interests** genres (with a bouncing animation on premieres).
-- **Genre, Source & View Filtering**: Filter by genre, TV vs. Streaming, local vs. network time; switch between **Cards**, **Compact**, and **Up Next** (agenda) views; or click the week range to jump via the **Month Picker**.
+- **Search & Add**: Live TVmaze & TMDB search bar (`/` shortcut) to add, hide, or unhide shows and movies at any time.
+- **Movies Mode (TMDB)**: Toggle **Shows | Both | Movies** to browse movies released on Digital/Streaming, Physical media, or TV from TMDB, inheriting sync filters, favorites, genres, and External Search links.
+- **Twice-Monthly TVmaze & TMDB Sync (2 Weeks Ahead)**: Automatically checks twice per calendar month (`days 1–15` and `16–end`) looking two weeks ahead for new or updated TVmaze shows and TMDB movie releases (plus hourly TVmaze entry update checks and manual **Refresh from TVmaze**), configurable by language, genres, type, and popularity in **Settings**.
+- **Hidden Items & 25% Opacity View**: Hide any show or movie permanently without a list cap so automated TVmaze/TMDB updates never re-add it. Manage/unhide anytime in the **Hidden** tab, or enable **Show hidden items (25% opacity)** in **Settings** to display hidden items inline at 25% opacity with quick Unhide actions.
+- **Favorites & My Interests**: Star shows/movies (`F` shortcut) and highlight selected **My interests** genres (with a bouncing badge animation on all premieres).
+- **Genre, Source & Time Filtering**: Filter by genre, TV vs. Streaming vs. Disc, and local vs. network time.
 - **External Search Customization**: Configure any custom search URL template (using `{query}` placeholder with any desired resolution/quality tags directly inside the URL) and per-show custom title overrides inside **Settings → External Search**.
 - **Windows Background Startup**: Run `scripts/install-startup.cmd` (or `npm run startup:install`) to auto-start silently on Windows login (`scripts/uninstall-startup.cmd` to remove).
 - **Responsive & Fast**: Keyboard navigation (`←` / `→` weeks, `T` today, `F` favorites, `/` search, `M` settings drawer, `Esc` close), local disk cache in `data/`, and LAN access for phones.

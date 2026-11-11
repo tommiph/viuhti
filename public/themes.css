@@ -1,0 +1,959 @@
+/* Viuhti — 10 Selectable Visual Themes (5 Dark, 5 Light) */
+
+/* Readable event pill & dark-overlay ink adjustments shared across all 5 light themes */
+:is(
+  html[data-theme="bistro"],
+  html[data-theme="newspaper"],
+  html[data-theme="swiss"],
+  html[data-theme="botanical"],
+  html[data-theme="popart"]
+) {
+  color-scheme: light;
+}
+
+:is(
+  html[data-theme="bistro"],
+  html[data-theme="newspaper"],
+  html[data-theme="swiss"],
+  html[data-theme="botanical"],
+  html[data-theme="popart"]
+) .ev-pill.series-prem { background: rgba(190, 24, 93, 0.13); border-color: rgba(190, 24, 93, 0.42); color: #9d174d; }
+:is(
+  html[data-theme="bistro"],
+  html[data-theme="newspaper"],
+  html[data-theme="swiss"],
+  html[data-theme="botanical"],
+  html[data-theme="popart"]
+) .ev-pill.season-prem { background: rgba(109, 40, 217, 0.12); border-color: rgba(109, 40, 217, 0.4); color: #5b21b6; }
+:is(
+  html[data-theme="bistro"],
+  html[data-theme="newspaper"],
+  html[data-theme="swiss"],
+  html[data-theme="botanical"],
+  html[data-theme="popart"]
+) .ev-pill.season-fin { background: rgba(180, 83, 9, 0.12); border-color: rgba(180, 83, 9, 0.42); color: #92400e; }
+:is(
+  html[data-theme="bistro"],
+  html[data-theme="newspaper"],
+  html[data-theme="swiss"],
+  html[data-theme="botanical"],
+  html[data-theme="popart"]
+) .ev-pill.series-fin { background: rgba(185, 28, 28, 0.13); border-color: rgba(185, 28, 28, 0.42); color: #991b1b; }
+:is(
+  html[data-theme="bistro"],
+  html[data-theme="newspaper"],
+  html[data-theme="swiss"],
+  html[data-theme="botanical"],
+  html[data-theme="popart"]
+) .ev-pill.special { background: rgba(67, 56, 202, 0.12); border-color: rgba(67, 56, 202, 0.4); color: #3730a3; }
+:is(
+  html[data-theme="bistro"],
+  html[data-theme="newspaper"],
+  html[data-theme="swiss"],
+  html[data-theme="botanical"],
+  html[data-theme="popart"]
+) .ev-pill.movie { background: rgba(3, 105, 161, 0.12); border-color: rgba(3, 105, 161, 0.4); color: #075985; }
+:is(
+  html[data-theme="bistro"],
+  html[data-theme="newspaper"],
+  html[data-theme="swiss"],
+  html[data-theme="botanical"],
+  html[data-theme="popart"]
+) .ev-pill.new { background: rgba(4, 120, 87, 0.12); border-color: rgba(4, 120, 87, 0.42); color: #065f46; }
+:is(
+  html[data-theme="bistro"],
+  html[data-theme="newspaper"],
+  html[data-theme="swiss"],
+  html[data-theme="botanical"],
+  html[data-theme="popart"]
+) .ep-art .art-fallback { color: #f8fafc; }
+
+/* =========================================================
+   2. GRAND BISTRO (Light — Fine Dining Restaurant Menu)
+   ========================================================= */
+html[data-theme="bistro"] {
+  --bg: #f6efe0;
+  --bg-2: #ede1c9;
+  --panel: rgba(252, 248, 238, 0.94);
+  --panel-solid: #fcf8ee;
+  --panel-2: rgba(110, 20, 35, 0.04);
+  --border: #d5c29e;
+  --border-strong: #b89b67;
+  --text: #2a1813;
+  --muted: #6c5344;
+  --dim: #8c7361;
+  --accent: #7a1826;
+  --accent-2: #9b6b1e;
+  --accent-3: #4f2018;
+  --grad: linear-gradient(125deg, #6e1423 0%, #9b6b1e 100%);
+  --btn-fg: #fdf8ec;
+  --ok: #1f6b47;
+  --radius: 10px;
+  --radius-sm: 6px;
+  --shadow: 0 18px 40px -20px rgba(42, 24, 19, 0.28);
+  --card-shadow: inset 0 0 0 1px rgba(184, 155, 103, 0.25);
+  --font: Georgia, 'Times New Roman', serif;
+  --font-display: 'Playfair Display', Georgia, serif;
+
+  --bg-glow-img:
+    radial-gradient(800px 500px at 15% 0%, rgba(184, 155, 103, 0.16), transparent 65%),
+    radial-gradient(700px 500px at 90% 100%, rgba(122, 24, 38, 0.07), transparent 65%),
+    linear-gradient(180deg, #faf4e6, #f0e4cc);
+  --topbar-bg: rgba(250, 244, 232, 0.96);
+  --surface-elevated: #fdf9ef;
+  --day-bg: #fcf8ee;
+  --day-bg-solid: #fcf8ee;
+  --day-head-bg: #f4ebd8;
+  --today-head-bg: linear-gradient(120deg, rgba(122, 24, 38, 0.12), rgba(155, 107, 30, 0.16));
+  --today-glow: 0 14px 32px -18px rgba(122, 24, 38, 0.35);
+  --card-bg: #fffdf6;
+  --card-hover-bg: #f8f0df;
+  --drawer-bg: #fbf6ea;
+  --modal-bg: #fcf7eb;
+  --modal-scrim-bg: rgba(34, 18, 12, 0.55);
+  --scrim-bg: rgba(34, 18, 12, 0.42);
+  --control-bg: rgba(110, 20, 35, 0.05);
+  --control-hover: rgba(110, 20, 35, 0.11);
+  --control-active: rgba(122, 24, 38, 0.14);
+  --ghost-bg: rgba(155, 107, 30, 0.09);
+  --thumb-bg: #e6dac3;
+  --badge-time-bg: rgba(42, 24, 19, 0.88);
+  --badge-time-fg: #fdf8ec;
+  --agenda-time-fg: #6e1423;
+  --focus-ring: #7a1826;
+
+  --active-tint-bg: rgba(122, 24, 38, 0.11);
+  --active-tint-border: rgba(122, 24, 38, 0.45);
+  --active-tint-fg: #6e1423;
+  --chip-on-bg: #6e1423;
+  --chip-on-fg: #fdf8ec;
+
+  --ext-bg: rgba(31, 107, 71, 0.11);
+  --ext-border: rgba(31, 107, 71, 0.38);
+  --ext-fg: #145335;
+  --ext-hover-bg: #1f6b47;
+  --ext-hover-fg: #fff;
+
+  --fav-on-bg: rgba(155, 107, 30, 0.16);
+  --fav-on-border: rgba(155, 107, 30, 0.52);
+  --fav-on-fg: #734b09;
+  --fav-star: #b47812;
+
+  --int-box-bg: rgba(155, 107, 30, 0.10);
+  --int-box-border: rgba(155, 107, 30, 0.38);
+  --int-fg: #6b4509;
+  --int-title-fg: #6e1423;
+  --int-dot: #9b6b1e;
+
+  --ok-bg: rgba(31, 107, 71, 0.12);
+  --ok-border: rgba(31, 107, 71, 0.38);
+  --ok-fg: #145335;
+  --warn-bg: rgba(180, 83, 9, 0.12);
+  --warn-border: rgba(180, 83, 9, 0.4);
+  --warn-fg: #78350f;
+  --danger-bg: rgba(185, 28, 28, 0.10);
+  --danger-border: rgba(185, 28, 28, 0.35);
+  --danger-fg: #991b1b;
+
+  --link-fg: #7a1826;
+  --key-box-bg: rgba(155, 107, 30, 0.08);
+  --key-box-border: rgba(155, 107, 30, 0.28);
+  --disc-box-bg: rgba(122, 24, 38, 0.06);
+  --disc-box-border: rgba(122, 24, 38, 0.24);
+  --ext-box-bg: rgba(31, 107, 71, 0.07);
+  --ext-box-border: rgba(31, 107, 71, 0.25);
+  --code-chip-bg: rgba(122, 24, 38, 0.1);
+  --code-chip-fg: #6e1423;
+}
+html[data-theme="bistro"] .topbar { border-bottom: 3px double #b89b67; }
+html[data-theme="bistro"] .day,
+html[data-theme="bistro"] .month-cell {
+  border: 1px solid #b89b67;
+  box-shadow: 0 0 0 3px #f6efe0, 0 0 0 4px #cbb07d, 0 12px 26px -18px rgba(42, 24, 19, 0.35);
+}
+html[data-theme="bistro"] .day-head { border-bottom: 1px dashed #b89b67; justify-content: center; gap: 10px; }
+html[data-theme="bistro"] .month-day-jump { border-bottom: 1px dashed #b89b67; color: #6e1423; }
+html[data-theme="bistro"] .day-name { text-transform: uppercase; letter-spacing: 0.08em; font-size: 13.5px; color: #6e1423; }
+html[data-theme="bistro"] .ep,
+html[data-theme="bistro"] .day-card { border-style: solid; border-color: #dfcfb1; }
+html[data-theme="bistro"] .ep-show,
+html[data-theme="bistro"] .day-card-show { font-family: var(--font-display); }
+html[data-theme="bistro"] .ep-title { font-style: italic; }
+
+/* =========================================================
+   3. DEPARTURE BOARD (Dark — Airport Split-Flap Terminal)
+   ========================================================= */
+html[data-theme="airport"] {
+  --bg: #0a0b0e;
+  --bg-2: #12151b;
+  --panel: #151820;
+  --panel-solid: #151820;
+  --panel-2: rgba(255, 176, 0, 0.05);
+  --border: #2a2f3a;
+  --border-strong: #414857;
+  --text: #f3f4f6;
+  --muted: #b0b6c4;
+  --dim: #737b8c;
+  --accent: #ffb000;
+  --accent-2: #c8ff3d;
+  --accent-3: #ff6b00;
+  --grad: linear-gradient(120deg, #ffb000 0%, #f59e0b 100%);
+  --btn-fg: #0b0c10;
+  --ok: #c8ff3d;
+  --radius: 4px;
+  --radius-sm: 2px;
+  --shadow: 0 20px 50px -15px rgba(0, 0, 0, 0.9);
+  --card-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.05);
+  --font: 'JetBrains Mono', ui-monospace, 'Cascadia Code', Consolas, monospace;
+  --font-display: 'JetBrains Mono', ui-monospace, Consolas, monospace;
+
+  --bg-glow-img:
+    radial-gradient(900px 420px at 50% -15%, rgba(255, 176, 0, 0.11), transparent 65%),
+    repeating-linear-gradient(180deg, rgba(255, 255, 255, 0.015) 0 1px, transparent 1px 4px),
+    linear-gradient(180deg, #101218, #08090c);
+  --topbar-bg: #0f1116;
+  --surface-elevated: #14171f;
+  --day-bg: #12151c;
+  --day-bg-solid: #12151c;
+  --day-head-bg: #191d26;
+  --today-head-bg: linear-gradient(180deg, rgba(255, 176, 0, 0.22), rgba(255, 176, 0, 0.1));
+  --today-glow: 0 0 0 1px rgba(255, 176, 0, 0.45);
+  --card-bg: #171a23;
+  --card-hover-bg: #1e232e;
+  --drawer-bg: #101218;
+  --modal-bg: #13161e;
+  --control-bg: #1c202a;
+  --control-hover: #252a38;
+  --control-active: #ffb000;
+  --ghost-bg: #1c202a;
+  --thumb-bg: #181b22;
+  --badge-time-bg: #090a0d;
+  --badge-time-fg: #ffb000;
+  --agenda-time-fg: #ffb000;
+  --focus-ring: #ffb000;
+
+  --active-tint-bg: rgba(255, 176, 0, 0.15);
+  --active-tint-border: rgba(255, 176, 0, 0.55);
+  --active-tint-fg: #ffd166;
+  --chip-on-bg: #ffb000;
+  --chip-on-fg: #0a0b0e;
+
+  --ext-bg: rgba(200, 255, 61, 0.14);
+  --ext-border: rgba(200, 255, 61, 0.45);
+  --ext-fg: #d9ff70;
+  --ext-hover-bg: #c8ff3d;
+  --ext-hover-fg: #0a0b0e;
+
+  --fav-on-bg: rgba(255, 176, 0, 0.18);
+  --fav-on-border: rgba(255, 176, 0, 0.65);
+  --fav-on-fg: #ffb000;
+  --fav-star: #ffb000;
+
+  --int-box-bg: rgba(200, 255, 61, 0.10);
+  --int-box-border: rgba(200, 255, 61, 0.4);
+  --int-fg: #d9ff70;
+  --int-title-fg: #c8ff3d;
+  --int-dot: #c8ff3d;
+
+  --link-fg: #ffb000;
+  --key-box-bg: rgba(255, 176, 0, 0.07);
+  --key-box-border: rgba(255, 176, 0, 0.28);
+  --disc-box-bg: rgba(255, 176, 0, 0.06);
+  --disc-box-border: rgba(255, 176, 0, 0.25);
+  --ext-box-bg: rgba(200, 255, 61, 0.06);
+  --ext-box-border: rgba(200, 255, 61, 0.25);
+  --code-chip-bg: rgba(255, 176, 0, 0.14);
+  --code-chip-fg: #ffd166;
+}
+html[data-theme="airport"] body { font-variant-numeric: tabular-nums; font-size: 13px; }
+html[data-theme="airport"] .topbar { border-bottom: 2px solid #ffb000; }
+html[data-theme="airport"] .day-name,
+html[data-theme="airport"] .week-title h1,
+html[data-theme="airport"] .ep-show { text-transform: uppercase; letter-spacing: 0.04em; }
+html[data-theme="airport"] .seg button.on { color: #0a0b0e; }
+html[data-theme="airport"] .ep-time,
+html[data-theme="airport"] .ep-code-badge {
+  border: 1px solid #3c4352;
+  background: linear-gradient(180deg, #1b1f29 0%, #1b1f29 48%, #040507 50%, #11141c 52%, #11141c 100%);
+  letter-spacing: 0.06em;
+}
+html[data-theme="airport"] .day-head {
+  background: linear-gradient(180deg, #1c202a 0%, #1c202a 48%, #0b0d11 50%, #161a23 52%, #161a23 100%);
+}
+html[data-theme="airport"] .ep-tag.series-prem,
+html[data-theme="airport"] .ep-tag.season-prem { color: #0a0b0e; }
+
+/* =========================================================
+   4. SILVER SCREEN (Dark — Art Deco Cinema / Movies)
+   ========================================================= */
+html[data-theme="cinema"] {
+  --bg: #0e0407;
+  --bg-2: #1c070f;
+  --panel: rgba(30, 10, 17, 0.88);
+  --panel-solid: #210912;
+  --panel-2: rgba(229, 190, 99, 0.06);
+  --border: rgba(229, 190, 99, 0.24);
+  --border-strong: rgba(229, 190, 99, 0.48);
+  --text: #fbf3df;
+  --muted: #ccb898;
+  --dim: #927e62;
+  --accent: #e5be63;
+  --accent-2: #be123c;
+  --accent-3: #f5d78e;
+  --grad: linear-gradient(125deg, #c9973e 0%, #f1d384 55%, #b91c1c 100%);
+  --btn-fg: #19070d;
+  --ok: #84cc16;
+  --radius: 8px;
+  --radius-sm: 4px;
+  --shadow: 0 25px 60px -20px #000;
+  --card-shadow: 0 0 0 1px rgba(229, 190, 99, 0.12);
+  --font: 'Inter', system-ui, sans-serif;
+  --font-display: 'Cinzel', 'Playfair Display', Georgia, serif;
+
+  --bg-glow-img:
+    radial-gradient(850px 550px at 50% -10%, rgba(229, 190, 99, 0.16), transparent 60%),
+    radial-gradient(600px 600px at 0% 50%, rgba(190, 18, 60, 0.22), transparent 60%),
+    radial-gradient(600px 600px at 100% 50%, rgba(190, 18, 60, 0.22), transparent 60%),
+    linear-gradient(180deg, #1b070e, #0b0305);
+  --topbar-bg: rgba(20, 6, 11, 0.96);
+  --surface-elevated: rgba(29, 9, 16, 0.98);
+  --day-bg: rgba(25, 8, 14, 0.92);
+  --day-bg-solid: #19080e;
+  --day-head-bg: rgba(34, 11, 19, 0.98);
+  --today-head-bg: linear-gradient(120deg, rgba(229, 190, 99, 0.24), rgba(190, 18, 60, 0.24));
+  --today-glow: 0 16px 40px -18px rgba(229, 190, 99, 0.4);
+  --card-bg: rgba(229, 190, 99, 0.045);
+  --card-hover-bg: rgba(229, 190, 99, 0.1);
+  --drawer-bg: rgba(20, 6, 11, 0.98);
+  --modal-bg: #1a070d;
+  --control-bg: rgba(229, 190, 99, 0.07);
+  --control-hover: rgba(229, 190, 99, 0.15);
+  --control-active: rgba(229, 190, 99, 0.24);
+  --ghost-bg: rgba(229, 190, 99, 0.08);
+  --thumb-bg: #260b14;
+  --badge-time-bg: rgba(16, 4, 8, 0.88);
+  --badge-time-fg: #f3d68a;
+  --agenda-time-fg: #f3d68a;
+  --focus-ring: #e5be63;
+
+  --active-tint-bg: rgba(229, 190, 99, 0.18);
+  --active-tint-border: rgba(229, 190, 99, 0.65);
+  --active-tint-fg: #f7dfb0;
+  --chip-on-bg: #e5be63;
+  --chip-on-fg: #19070d;
+
+  --fav-on-bg: rgba(229, 190, 99, 0.2);
+  --fav-on-border: rgba(229, 190, 99, 0.7);
+  --fav-on-fg: #f7dfb0;
+  --fav-star: #f3d68a;
+
+  --link-fg: #f3d68a;
+  --disc-box-bg: rgba(190, 18, 60, 0.12);
+  --disc-box-border: rgba(229, 190, 99, 0.3);
+}
+html[data-theme="cinema"] .topbar {
+  border-bottom: 2px solid #e5be63;
+  box-shadow: 0 4px 24px -10px rgba(229, 190, 99, 0.35);
+}
+html[data-theme="cinema"] .day {
+  border: 1px solid rgba(229, 190, 99, 0.38);
+  background-image:
+    repeating-linear-gradient(180deg, rgba(229, 190, 99, 0.16) 0 6px, transparent 6px 14px);
+  background-size: 6px 14px;
+  background-repeat: repeat-y;
+  background-position: 4px 0;
+}
+html[data-theme="cinema"] .day-head { padding-left: 18px; }
+html[data-theme="cinema"] .day-body { padding-left: 16px; }
+html[data-theme="cinema"] .day-name,
+html[data-theme="cinema"] .week-title h1 { letter-spacing: 0.04em; color: #f6ddb1; }
+
+/* =========================================================
+   5. THE DAILY BROADSHEET (Light — Editorial Newspaper)
+   ========================================================= */
+html[data-theme="newspaper"] {
+  --bg: #f1ede4;
+  --bg-2: #e5dfd2;
+  --panel: #f7f4ec;
+  --panel-solid: #f7f4ec;
+  --panel-2: rgba(20, 20, 20, 0.04);
+  --border: #c5bfb2;
+  --border-strong: #1a1a1a;
+  --text: #141414;
+  --muted: #52504a;
+  --dim: #737067;
+  --accent: #141414;
+  --accent-2: #b91c1c;
+  --accent-3: #333333;
+  --grad: linear-gradient(120deg, #141414 0%, #383838 100%);
+  --btn-fg: #f7f4ec;
+  --ok: #166534;
+  --radius: 0px;
+  --radius-sm: 0px;
+  --shadow: 0 12px 24px -12px rgba(0, 0, 0, 0.25);
+  --card-shadow: none;
+  --font: Georgia, 'Times New Roman', serif;
+  --font-display: 'Playfair Display', Georgia, serif;
+
+  --bg-glow-img: linear-gradient(180deg, #f3efe6, #e9e3d5);
+  --topbar-bg: #f4f0e7;
+  --surface-elevated: #faf7f0;
+  --day-bg: #f8f5ee;
+  --day-bg-solid: #f8f5ee;
+  --day-head-bg: #ede7da;
+  --today-head-bg: linear-gradient(180deg, rgba(185, 28, 28, 0.12), rgba(185, 28, 28, 0.05));
+  --today-glow: none;
+  --card-bg: #fcfaf4;
+  --card-hover-bg: #efe9dc;
+  --drawer-bg: #f6f2e9;
+  --modal-bg: #faf7ef;
+  --modal-scrim-bg: rgba(20, 20, 20, 0.55);
+  --scrim-bg: rgba(20, 20, 20, 0.45);
+  --control-bg: rgba(20, 20, 20, 0.04);
+  --control-hover: rgba(20, 20, 20, 0.1);
+  --control-active: #141414;
+  --ghost-bg: transparent;
+  --thumb-bg: #dcd5c5;
+  --badge-time-bg: #141414;
+  --badge-time-fg: #f7f4ec;
+  --agenda-time-fg: #141414;
+  --focus-ring: #141414;
+
+  --active-tint-bg: rgba(20, 20, 20, 0.08);
+  --active-tint-border: #141414;
+  --active-tint-fg: #141414;
+  --chip-on-bg: #141414;
+  --chip-on-fg: #f7f4ec;
+
+  --ext-bg: rgba(20, 20, 20, 0.06);
+  --ext-border: #141414;
+  --ext-fg: #141414;
+  --ext-hover-bg: #141414;
+  --ext-hover-fg: #f7f4ec;
+
+  --fav-on-bg: rgba(185, 28, 28, 0.12);
+  --fav-on-border: #b91c1c;
+  --fav-on-fg: #991b1b;
+  --fav-star: #b91c1c;
+
+  --int-box-bg: rgba(185, 28, 28, 0.07);
+  --int-box-border: rgba(185, 28, 28, 0.4);
+  --int-fg: #7f1d1d;
+  --int-title-fg: #991b1b;
+  --int-dot: #b91c1c;
+
+  --ok-bg: rgba(22, 101, 52, 0.1);
+  --ok-border: rgba(22, 101, 52, 0.4);
+  --ok-fg: #14532d;
+  --warn-bg: rgba(180, 83, 9, 0.1);
+  --warn-border: rgba(180, 83, 9, 0.4);
+  --warn-fg: #78350f;
+  --danger-bg: rgba(185, 28, 28, 0.1);
+  --danger-border: rgba(185, 28, 28, 0.45);
+  --danger-fg: #991b1b;
+
+  --link-fg: #b91c1c;
+  --key-box-bg: rgba(20, 20, 20, 0.03);
+  --key-box-border: #8c867a;
+  --disc-box-bg: rgba(20, 20, 20, 0.03);
+  --disc-box-border: #8c867a;
+  --ext-box-bg: rgba(20, 20, 20, 0.03);
+  --ext-box-border: #8c867a;
+  --code-chip-bg: rgba(20, 20, 20, 0.08);
+  --code-chip-fg: #141414;
+}
+html[data-theme="newspaper"] *,
+html[data-theme="newspaper"] .btn,
+html[data-theme="newspaper"] .ep-tag,
+html[data-theme="newspaper"] .ev-pill,
+html[data-theme="newspaper"] .src,
+html[data-theme="newspaper"] .count { border-radius: 0 !important; }
+html[data-theme="newspaper"] .topbar { border-bottom: 4px double #141414; }
+html[data-theme="newspaper"] .day,
+html[data-theme="newspaper"] .month-cell { border: 1px solid #333; border-top: 3px solid #141414; }
+html[data-theme="newspaper"] .day-head,
+html[data-theme="newspaper"] .month-day-jump { border-bottom: 1px solid #141414; }
+html[data-theme="newspaper"] .day-name { text-transform: uppercase; letter-spacing: 0.05em; font-weight: 800; }
+html[data-theme="newspaper"] .seg button.on { color: #f7f4ec; }
+html[data-theme="newspaper"] .ep,
+html[data-theme="newspaper"] .day-card { border-color: #bbb4a6; border-bottom-color: #141414; }
+html[data-theme="newspaper"] .ep-art img,
+html[data-theme="newspaper"] .day-card-art img { filter: sepia(12%) contrast(1.06); }
+
+/* =========================================================
+   6. ARCHITECT BLUEPRINT (Dark — Cyanotype Schematic)
+   ========================================================= */
+html[data-theme="blueprint"] {
+  --bg: #052142;
+  --bg-2: #072c59;
+  --panel: rgba(8, 43, 86, 0.85);
+  --panel-solid: #093060;
+  --panel-2: rgba(125, 211, 252, 0.06);
+  --border: rgba(147, 213, 255, 0.25);
+  --border-strong: rgba(186, 230, 255, 0.55);
+  --text: #eaf6ff;
+  --muted: #9dd4fb;
+  --dim: #66a6d6;
+  --accent: #38bdf8;
+  --accent-2: #fde047;
+  --accent-3: #e0f2fe;
+  --grad: linear-gradient(120deg, #38bdf8 0%, #7dd3fc 100%);
+  --btn-fg: #041830;
+  --ok: #4ade80;
+  --radius: 3px;
+  --radius-sm: 2px;
+  --shadow: 0 20px 50px -20px rgba(0, 10, 30, 0.85);
+  --card-shadow: none;
+  --font: 'JetBrains Mono', Consolas, monospace;
+  --font-display: 'JetBrains Mono', Consolas, monospace;
+
+  --bg-glow-img:
+    linear-gradient(rgba(147, 213, 255, 0.13) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(147, 213, 255, 0.13) 1px, transparent 1px),
+    linear-gradient(rgba(147, 213, 255, 0.05) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(147, 213, 255, 0.05) 1px, transparent 1px);
+  --bg-glow-size: 120px 120px, 120px 120px, 24px 24px, 24px 24px;
+  --topbar-bg: rgba(4, 28, 56, 0.96);
+  --surface-elevated: rgba(7, 37, 74, 0.98);
+  --day-bg: rgba(7, 36, 72, 0.88);
+  --day-bg-solid: #072448;
+  --day-head-bg: rgba(9, 44, 88, 0.96);
+  --today-head-bg: linear-gradient(120deg, rgba(56, 189, 248, 0.25), rgba(253, 224, 71, 0.16));
+  --today-glow: 0 0 0 1px #fde047;
+  --card-bg: rgba(186, 230, 255, 0.05);
+  --card-hover-bg: rgba(186, 230, 255, 0.11);
+  --drawer-bg: rgba(5, 31, 62, 0.98);
+  --modal-bg: #07264d;
+  --control-bg: rgba(186, 230, 255, 0.07);
+  --control-hover: rgba(186, 230, 255, 0.15);
+  --control-active: #38bdf8;
+  --ghost-bg: rgba(186, 230, 255, 0.08);
+  --thumb-bg: #0a3468;
+  --badge-time-bg: rgba(4, 24, 48, 0.9);
+  --badge-time-fg: #e0f2fe;
+  --agenda-time-fg: #7dd3fc;
+  --focus-ring: #7dd3fc;
+
+  --active-tint-bg: rgba(56, 189, 248, 0.2);
+  --active-tint-border: rgba(125, 211, 252, 0.7);
+  --active-tint-fg: #e0f2fe;
+  --chip-on-bg: #38bdf8;
+  --chip-on-fg: #041830;
+
+  --fav-on-bg: rgba(253, 224, 71, 0.18);
+  --fav-on-border: rgba(253, 224, 71, 0.7);
+  --fav-on-fg: #fef08a;
+  --fav-star: #fde047;
+}
+html[data-theme="blueprint"] body { font-size: 13px; }
+html[data-theme="blueprint"] .topbar { border-bottom: 1.5px solid rgba(186, 230, 255, 0.5); }
+html[data-theme="blueprint"] .day,
+html[data-theme="blueprint"] .month-cell { border: 1px dashed rgba(186, 230, 255, 0.45); }
+html[data-theme="blueprint"] .day-head,
+html[data-theme="blueprint"] .month-day-jump { border-bottom: 1px solid rgba(186, 230, 255, 0.4); }
+html[data-theme="blueprint"] .day-name { text-transform: uppercase; letter-spacing: 0.06em; }
+html[data-theme="blueprint"] .seg button.on { color: #041830; }
+html[data-theme="blueprint"] .ep,
+html[data-theme="blueprint"] .day-card { border: 1px dashed rgba(147, 213, 255, 0.35); }
+html[data-theme="blueprint"] .ep-art img { opacity: 0.88; }
+
+/* =========================================================
+   7. SWISS ATELIER (Light — Modernist International Style)
+   ========================================================= */
+html[data-theme="swiss"] {
+  --bg: #f4f3ee;
+  --bg-2: #eae8e0;
+  --panel: #ffffff;
+  --panel-solid: #ffffff;
+  --panel-2: rgba(17, 17, 17, 0.04);
+  --border: #d0cec4;
+  --border-strong: #111111;
+  --text: #111111;
+  --muted: #4b4b48;
+  --dim: #74746f;
+  --accent: #e12d1a;
+  --accent-2: #1d4ed8;
+  --accent-3: #111111;
+  --grad: linear-gradient(120deg, #e12d1a 0%, #c81e1e 100%);
+  --btn-fg: #ffffff;
+  --ok: #047857;
+  --radius: 2px;
+  --radius-sm: 2px;
+  --shadow: 6px 6px 0 rgba(17, 17, 17, 0.14);
+  --card-shadow: none;
+  --font: 'Space Grotesk', 'Inter', system-ui, sans-serif;
+  --font-display: 'Space Grotesk', system-ui, sans-serif;
+
+  --bg-glow-img: linear-gradient(180deg, #f7f6f2, #efede6);
+  --topbar-bg: #ffffff;
+  --surface-elevated: #ffffff;
+  --day-bg: #ffffff;
+  --day-bg-solid: #ffffff;
+  --day-head-bg: #f4f3ee;
+  --today-head-bg: #111111;
+  --today-glow: 4px 4px 0 #e12d1a;
+  --card-bg: #faf9f6;
+  --card-hover-bg: #ffffff;
+  --drawer-bg: #ffffff;
+  --modal-bg: #ffffff;
+  --modal-scrim-bg: rgba(17, 17, 17, 0.52);
+  --scrim-bg: rgba(17, 17, 17, 0.4);
+  --control-bg: rgba(17, 17, 17, 0.04);
+  --control-hover: rgba(17, 17, 17, 0.09);
+  --control-active: #111111;
+  --ghost-bg: #ffffff;
+  --thumb-bg: #e4e2da;
+  --badge-time-bg: #111111;
+  --badge-time-fg: #ffffff;
+  --agenda-time-fg: #e12d1a;
+  --focus-ring: #e12d1a;
+
+  --active-tint-bg: rgba(225, 45, 26, 0.1);
+  --active-tint-border: #e12d1a;
+  --active-tint-fg: #b91c1c;
+  --chip-on-bg: #e12d1a;
+  --chip-on-fg: #ffffff;
+
+  --ext-bg: rgba(29, 78, 216, 0.09);
+  --ext-border: rgba(29, 78, 216, 0.45);
+  --ext-fg: #1e40af;
+  --ext-hover-bg: #1d4ed8;
+  --ext-hover-fg: #ffffff;
+
+  --fav-on-bg: rgba(217, 119, 6, 0.12);
+  --fav-on-border: #d97706;
+  --fav-on-fg: #92400e;
+  --fav-star: #d97706;
+
+  --int-box-bg: rgba(29, 78, 216, 0.07);
+  --int-box-border: rgba(29, 78, 216, 0.35);
+  --int-fg: #1e3a8a;
+  --int-title-fg: #1e40af;
+  --int-dot: #1d4ed8;
+
+  --ok-bg: rgba(4, 120, 87, 0.1);
+  --ok-border: rgba(4, 120, 87, 0.4);
+  --ok-fg: #065f46;
+  --warn-bg: rgba(180, 83, 9, 0.1);
+  --warn-border: rgba(180, 83, 9, 0.4);
+  --warn-fg: #78350f;
+  --danger-bg: rgba(225, 45, 26, 0.1);
+  --danger-border: rgba(225, 45, 26, 0.45);
+  --danger-fg: #991b1b;
+
+  --link-fg: #e12d1a;
+  --key-box-bg: #faf9f6;
+  --key-box-border: #c5c3b8;
+  --disc-box-bg: #faf9f6;
+  --disc-box-border: #c5c3b8;
+  --ext-box-bg: #faf9f6;
+  --ext-box-border: #c5c3b8;
+  --code-chip-bg: rgba(17, 17, 17, 0.08);
+  --code-chip-fg: #111111;
+}
+html[data-theme="swiss"] .topbar { border-bottom: 2px solid #111111; }
+html[data-theme="swiss"] .day,
+html[data-theme="swiss"] .month-cell { border: 1.5px solid #111111; }
+html[data-theme="swiss"] .day.today .day-head,
+html[data-theme="swiss"] .month-cell.today .month-day-jump { color: #ffffff; }
+html[data-theme="swiss"] .day.today .day-num,
+html[data-theme="swiss"] .day.today .day-date,
+html[data-theme="swiss"] .day.today .day-count { color: #ffffff; }
+html[data-theme="swiss"] .seg button.on { color: #ffffff; }
+html[data-theme="swiss"] .ep,
+html[data-theme="swiss"] .day-card { border: 1px solid #111111; }
+html[data-theme="swiss"] .ep:hover,
+html[data-theme="swiss"] .day-card:hover { transform: translate(-2px, -2px); box-shadow: 3px 3px 0 #111111; }
+
+/* =========================================================
+   8. CYBER ARCADE (Dark — Tokyo Neon Terminal / CRT)
+   ========================================================= */
+html[data-theme="cyber"] {
+  --bg: #04010c;
+  --bg-2: #0a031d;
+  --panel: rgba(11, 5, 28, 0.9);
+  --panel-solid: #0d0522;
+  --panel-2: rgba(0, 245, 212, 0.05);
+  --border: rgba(0, 245, 212, 0.25);
+  --border-strong: rgba(0, 245, 212, 0.55);
+  --text: #ecfeff;
+  --muted: #8ee8df;
+  --dim: #549c96;
+  --accent: #00f5d4;
+  --accent-2: #ff2a85;
+  --accent-3: #a3e635;
+  --grad: linear-gradient(115deg, #00f5d4 0%, #3b82f6 50%, #ff2a85 100%);
+  --btn-fg: #04010c;
+  --ok: #00f5d4;
+  --radius: 6px;
+  --radius-sm: 4px;
+  --shadow: 0 0 36px -10px rgba(0, 245, 212, 0.4);
+  --card-shadow: 0 0 12px -6px rgba(0, 245, 212, 0.25);
+  --font: 'Space Grotesk', 'Inter', system-ui, sans-serif;
+  --font-display: 'JetBrains Mono', monospace;
+
+  --bg-glow-img:
+    repeating-linear-gradient(180deg, rgba(0, 245, 212, 0.03) 0 1px, transparent 1px 3px),
+    radial-gradient(800px 450px at 15% 0%, rgba(255, 42, 133, 0.2), transparent 60%),
+    radial-gradient(800px 450px at 90% 100%, rgba(0, 245, 212, 0.16), transparent 60%),
+    linear-gradient(180deg, #090218, #030109);
+  --topbar-bg: rgba(6, 2, 18, 0.96);
+  --surface-elevated: rgba(11, 4, 28, 0.98);
+  --day-bg: rgba(9, 4, 24, 0.92);
+  --day-bg-solid: #090418;
+  --day-head-bg: rgba(15, 6, 36, 0.96);
+  --today-head-bg: linear-gradient(120deg, rgba(0, 245, 212, 0.24), rgba(255, 42, 133, 0.22));
+  --today-glow: 0 0 24px -8px rgba(0, 245, 212, 0.65);
+  --card-bg: rgba(0, 245, 212, 0.04);
+  --card-hover-bg: rgba(0, 245, 212, 0.11);
+  --drawer-bg: rgba(7, 2, 20, 0.98);
+  --modal-bg: #0a031b;
+  --control-bg: rgba(0, 245, 212, 0.07);
+  --control-hover: rgba(0, 245, 212, 0.15);
+  --control-active: #00f5d4;
+  --ghost-bg: rgba(0, 245, 212, 0.08);
+  --thumb-bg: #130830;
+  --badge-time-bg: rgba(4, 1, 12, 0.9);
+  --badge-time-fg: #00f5d4;
+  --agenda-time-fg: #00f5d4;
+  --focus-ring: #00f5d4;
+
+  --active-tint-bg: rgba(0, 245, 212, 0.16);
+  --active-tint-border: rgba(0, 245, 212, 0.7);
+  --active-tint-fg: #5efce8;
+  --chip-on-bg: #00f5d4;
+  --chip-on-fg: #04010c;
+
+  --ext-bg: rgba(163, 230, 53, 0.14);
+  --ext-border: rgba(163, 230, 53, 0.5);
+  --ext-fg: #bef264;
+  --ext-hover-bg: #a3e635;
+  --ext-hover-fg: #04010c;
+
+  --link-fg: #00f5d4;
+}
+html[data-theme="cyber"] .topbar { border-bottom: 1.5px solid #ff2a85; box-shadow: 0 4px 20px -10px #ff2a85; }
+html[data-theme="cyber"] .seg button.on { color: #04010c; }
+html[data-theme="cyber"] .day-name { text-transform: uppercase; letter-spacing: 0.06em; color: #00f5d4; }
+html[data-theme="cyber"] .ep-tag.series-prem,
+html[data-theme="cyber"] .ep-tag.season-prem { color: #04010c; }
+
+/* =========================================================
+   9. GREENHOUSE (Light — Botanical Conservatory)
+   ========================================================= */
+html[data-theme="botanical"] {
+  --bg: #ecf3ea;
+  --bg-2: #dde9da;
+  --panel: rgba(250, 253, 249, 0.94);
+  --panel-solid: #fafdf9;
+  --panel-2: rgba(34, 84, 58, 0.05);
+  --border: #c5d9c3;
+  --border-strong: #87aa87;
+  --text: #152b1e;
+  --muted: #466651;
+  --dim: #688773;
+  --accent: #276749;
+  --accent-2: #c25e39;
+  --accent-3: #d69e2e;
+  --grad: linear-gradient(125deg, #276749 0%, #3b8460 55%, #c25e39 100%);
+  --btn-fg: #f8fcf7;
+  --ok: #1e6b43;
+  --radius: 22px;
+  --radius-sm: 14px;
+  --shadow: 0 20px 44px -22px rgba(21, 43, 30, 0.24);
+  --card-shadow: 0 6px 18px -12px rgba(21, 43, 30, 0.14);
+  --font: 'Inter', system-ui, sans-serif;
+  --font-display: 'Playfair Display', Georgia, serif;
+
+  --bg-glow-img:
+    radial-gradient(850px 520px at 12% 0%, rgba(59, 132, 96, 0.14), transparent 60%),
+    radial-gradient(700px 520px at 90% 95%, rgba(194, 94, 57, 0.11), transparent 60%),
+    linear-gradient(180deg, #f2f7f0, #e4efe1);
+  --topbar-bg: rgba(244, 249, 242, 0.95);
+  --surface-elevated: #fbfefa;
+  --day-bg: rgba(250, 253, 249, 0.92);
+  --day-bg-solid: #fafdf9;
+  --day-head-bg: #eef5ec;
+  --today-head-bg: linear-gradient(120deg, rgba(39, 103, 73, 0.15), rgba(194, 94, 57, 0.12));
+  --today-glow: 0 16px 38px -18px rgba(39, 103, 73, 0.35);
+  --card-bg: #ffffff;
+  --card-hover-bg: #f1f7ef;
+  --drawer-bg: #f7fbf6;
+  --modal-bg: #fafdf9;
+  --modal-scrim-bg: rgba(15, 36, 23, 0.48);
+  --scrim-bg: rgba(15, 36, 23, 0.36);
+  --control-bg: rgba(39, 103, 73, 0.06);
+  --control-hover: rgba(39, 103, 73, 0.13);
+  --control-active: rgba(39, 103, 73, 0.16);
+  --ghost-bg: rgba(39, 103, 73, 0.08);
+  --thumb-bg: #d9e7d6;
+  --badge-time-bg: rgba(21, 43, 30, 0.86);
+  --badge-time-fg: #f8fcf7;
+  --agenda-time-fg: #276749;
+  --focus-ring: #276749;
+
+  --active-tint-bg: rgba(39, 103, 73, 0.12);
+  --active-tint-border: rgba(39, 103, 73, 0.45);
+  --active-tint-fg: #1d4e37;
+  --chip-on-bg: #276749;
+  --chip-on-fg: #f8fcf7;
+
+  --ext-bg: rgba(39, 103, 73, 0.12);
+  --ext-border: rgba(39, 103, 73, 0.4);
+  --ext-fg: #1c4e35;
+  --ext-hover-bg: #276749;
+  --ext-hover-fg: #ffffff;
+
+  --fav-on-bg: rgba(194, 94, 57, 0.14);
+  --fav-on-border: rgba(194, 94, 57, 0.48);
+  --fav-on-fg: #8c3d20;
+  --fav-star: #c25e39;
+
+  --int-box-bg: rgba(39, 103, 73, 0.09);
+  --int-box-border: rgba(39, 103, 73, 0.32);
+  --int-fg: #194730;
+  --int-title-fg: #194730;
+  --int-dot: #276749;
+
+  --ok-bg: rgba(30, 107, 67, 0.12);
+  --ok-border: rgba(30, 107, 67, 0.38);
+  --ok-fg: #145333;
+  --warn-bg: rgba(180, 83, 9, 0.11);
+  --warn-border: rgba(180, 83, 9, 0.38);
+  --warn-fg: #78350f;
+  --danger-bg: rgba(185, 28, 28, 0.1);
+  --danger-border: rgba(185, 28, 28, 0.34);
+  --danger-fg: #991b1b;
+
+  --link-fg: #276749;
+  --key-box-bg: rgba(39, 103, 73, 0.05);
+  --key-box-border: rgba(39, 103, 73, 0.22);
+  --disc-box-bg: rgba(194, 94, 57, 0.06);
+  --disc-box-border: rgba(194, 94, 57, 0.24);
+  --ext-box-bg: rgba(39, 103, 73, 0.06);
+  --ext-box-border: rgba(39, 103, 73, 0.22);
+  --code-chip-bg: rgba(39, 103, 73, 0.1);
+  --code-chip-fg: #194730;
+}
+
+/* =========================================================
+   10. COMIC PRESS (Light — Pop Art / Neo-Brutalist Halftone)
+   ========================================================= */
+html[data-theme="popart"] {
+  --bg: #fffbef;
+  --bg-2: #fef08a;
+  --panel: #ffffff;
+  --panel-solid: #ffffff;
+  --panel-2: #fef9c3;
+  --border: #111111;
+  --border-strong: #111111;
+  --text: #111111;
+  --muted: #3f3f46;
+  --dim: #64646c;
+  --accent: #f43f5e;
+  --accent-2: #06b6d4;
+  --accent-3: #facc15;
+  --grad: linear-gradient(120deg, #facc15 0%, #fb7185 100%);
+  --btn-fg: #111111;
+  --ok: #059669;
+  --radius: 10px;
+  --radius-sm: 8px;
+  --shadow: 6px 6px 0 #111111;
+  --card-shadow: 3px 3px 0 #111111;
+  --font: 'Space Grotesk', 'Inter', system-ui, sans-serif;
+  --font-display: 'Space Grotesk', system-ui, sans-serif;
+
+  --bg-glow-img:
+    radial-gradient(rgba(17, 17, 17, 0.14) 1.25px, transparent 1.25px),
+    linear-gradient(180deg, #fffdf4, #fff4d2);
+  --bg-glow-size: 16px 16px, auto;
+  --bg-mobile: #fffbef;
+  --topbar-bg: #ffffff;
+  --surface-elevated: #ffffff;
+  --day-bg: #ffffff;
+  --day-bg-solid: #ffffff;
+  --day-head-bg: #fef08a;
+  --today-head-bg: #06b6d4;
+  --today-glow: 5px 5px 0 #111111;
+  --card-bg: #fffdf7;
+  --card-hover-bg: #e0f2fe;
+  --drawer-bg: #fffdf4;
+  --modal-bg: #ffffff;
+  --modal-scrim-bg: rgba(17, 17, 17, 0.58);
+  --scrim-bg: rgba(17, 17, 17, 0.45);
+  --control-bg: #ffffff;
+  --control-hover: #fef08a;
+  --control-active: #facc15;
+  --ghost-bg: #ffffff;
+  --thumb-bg: #bae6fd;
+  --badge-time-bg: #facc15;
+  --badge-time-fg: #111111;
+  --agenda-time-fg: #e11d48;
+  --focus-ring: #06b6d4;
+
+  --active-tint-bg: #cffafe;
+  --active-tint-border: #111111;
+  --active-tint-fg: #0e7490;
+  --chip-on-bg: #f43f5e;
+  --chip-on-fg: #ffffff;
+
+  --ext-bg: #bbf7d0;
+  --ext-border: #111111;
+  --ext-fg: #064e3b;
+  --ext-hover-bg: #10b981;
+  --ext-hover-fg: #111111;
+
+  --fav-on-bg: #fef08a;
+  --fav-on-border: #111111;
+  --fav-on-fg: #111111;
+  --fav-star: #eab308;
+
+  --int-box-bg: #e0f2fe;
+  --int-box-border: #111111;
+  --int-fg: #075985;
+  --int-title-fg: #0c4a6e;
+  --int-dot: #0284c7;
+
+  --ok-bg: #bbf7d0;
+  --ok-border: #111111;
+  --ok-fg: #064e3b;
+  --warn-bg: #fef08a;
+  --warn-border: #111111;
+  --warn-fg: #713f12;
+  --danger-bg: #fecdd3;
+  --danger-border: #111111;
+  --danger-fg: #881337;
+
+  --link-fg: #e11d48;
+  --key-box-bg: #e0f2fe;
+  --key-box-border: #111111;
+  --disc-box-bg: #fce7f3;
+  --disc-box-border: #111111;
+  --ext-box-bg: #dcfce7;
+  --ext-box-border: #111111;
+  --code-chip-bg: #111111;
+  --code-chip-fg: #facc15;
+}
+html[data-theme="popart"] .topbar { border-bottom: 2.5px solid #111111; }
+html[data-theme="popart"] .day,
+html[data-theme="popart"] .month-cell { border: 2px solid #111111; }
+html[data-theme="popart"] .day-head,
+html[data-theme="popart"] .month-day-jump { border-bottom: 2px solid #111111; }
+html[data-theme="popart"] .day.today,
+html[data-theme="popart"] .month-cell.today { border: 2px solid #111111; }
+html[data-theme="popart"] .day.today .day-name,
+html[data-theme="popart"] .day.today .day-num,
+html[data-theme="popart"] .day.today .day-date,
+html[data-theme="popart"] .day.today .day-count,
+html[data-theme="popart"] .month-cell.today .month-day-jump { color: #111111; }
+html[data-theme="popart"] .ep,
+html[data-theme="popart"] .day-card { border: 2px solid #111111; }
+html[data-theme="popart"] .ep:hover,
+html[data-theme="popart"] .day-card:hover { transform: translate(-2px, -2px); box-shadow: 5px 5px 0 #111111; }
+html[data-theme="popart"] .btn { border: 2px solid #111111; box-shadow: 2px 2px 0 #111111; }
+html[data-theme="popart"] .btn-ghost { box-shadow: 2px 2px 0 #111111; }
+html[data-theme="popart"] .ep-time,
+html[data-theme="popart"] .ep-code-badge { border: 1.5px solid #111111; }
+html[data-theme="popart"] .ep-tag,
+html[data-theme="popart"] .ev-pill { border: 1.5px solid #111111; }
+html[data-theme="popart"] .brand-text b { -webkit-text-fill-color: #111111; background: none; color: #f43f5e; }

@@ -18,7 +18,7 @@ const tvmaze = require('./lib/tvmaze');
 const tmdb = require('./lib/tmdb');
 const discovery = require('./lib/discovery');
 const movies = require('./lib/movies');
-const trash = require('./lib/trash');
+const hidden = require('./lib/hidden');
 
 tmdb.setKeyProvider(() => store.getTmdbApiKey());
 
@@ -190,12 +190,37 @@ function lanUrls(port) {
   return ips.map((x) => `http://${x.ip}:${port}`);
 }
 
+const shouldIncludeHidden = (sp) =>
+  sp.has('includeHidden') ? sp.get('includeHidden') === '1' : Boolean(store.getSettings().showHidden);
+
+function hideShowById(id, fallbackMeta = null) {
+  const meta = store.getShowMeta(id) || fallbackMeta || { id, name: `Show #${id}` };
+  const snap = store.snapshotForHidden(id, 'hidden');
+  const ok = store.removeShow(id);
+  if (snap) hidden.add(snap);
+  else if (!hidden.has('show', id)) {
+    hidden.add({ id, kind: 'show', name: meta.name, premiered: meta.premiered || null });
+  }
+  return { ok, id, name: meta.name };
+}
+
+function hideMovieById(id, fallbackMeta = null) {
+  const meta = movies.getMovieMeta(id) || fallbackMeta || { id, name: `Movie #${id}` };
+  const snap = movies.snapshotForHidden(id, 'hidden');
+  const ok = movies.removeMovie(id);
+  if (snap) hidden.add(snap);
+  else if (!hidden.has('movie', id)) {
+    hidden.add({ id, kind: 'movie', name: meta.name, premiered: meta.premiered || null });
+  }
+  return { ok, id, name: meta.name };
+}
+
 async function handleApi(req, res, url) {
   const { pathname, searchParams } = url;
   const method = req.method;
 
   if (pathname === '/api/shows' && method === 'GET') {
-    return sendJson(res, 200, store.listShows(), req);
+    return sendJson(res, 200, store.listShows({ includeHidden: shouldIncludeHidden(searchParams) }), req);
   }
 
   const itemDetail = pathname.match(/^\/api\/item\/(show|movie)\/(\d+)$/);
@@ -211,8 +236,7 @@ async function handleApi(req, res, url) {
     const body = await readBody(req);
     const id = Number(body.id);
     if (!id) return sendJson(res, 400, { error: 'Missing show id' });
-    discovery.unmarkExcluded(id);
-    trash.remove('show', id);
+    hidden.remove('show', id);
     const show = await store.addShow(id, 'search');
     return sendJson(res, 201, show);
   }
@@ -221,7 +245,7 @@ async function handleApi(req, res, url) {
   if (fav && method === 'POST') {
     const body = await readBody(req);
     const show = store.setFavorite(fav[1], body.favorite);
-    if (!show) return sendJson(res, 404, { error: 'Show not tracked' });
+    if (!show) return sendJson(res, 404, { error: 'Show not found' });
     return sendJson(res, 200, { ok: true, id: show.id, favorite: show.favorite, show });
   }
 
@@ -229,36 +253,27 @@ async function handleApi(req, res, url) {
   if (extq && method === 'POST') {
     const body = await readBody(req);
     const show = store.setExtQuery(extq[1], body.extQuery !== undefined ? body.extQuery : body.tdQuery);
-    if (!show) return sendJson(res, 404, { error: 'Show not tracked' });
+    if (!show) return sendJson(res, 404, { error: 'Show not found' });
     return sendJson(res, 200, { ok: true, id: show.id, extQuery: show.extQuery, show });
   }
 
   const del = pathname.match(/^\/api\/shows\/(\d+)$/);
   if (del && method === 'DELETE') {
     const id = Number(del[1]);
-    const meta = store.getShowMeta(id);
-    const snap = store.snapshotForTrash(id, 'removed');
-    const ok = store.removeShow(id);
-    if (ok) {
-      if (snap) trash.add(snap);
-      discovery.markExcluded(id, meta);
-    }
-    return sendJson(res, 200, { ok: true, alreadyRemoved: !ok, id, name: (meta && meta.name) || null });
+    const info = hideShowById(id);
+    return sendJson(res, 200, { ok: true, alreadyRemoved: !info.ok, id, name: info.name });
   }
 
   const sDismiss = pathname.match(/^\/api\/shows\/(\d+)\/dismiss$/);
   if (sDismiss && method === 'POST') {
     const id = Number(sDismiss[1]);
     const body = await readBody(req).catch(() => ({}));
-    const meta = store.getShowMeta(id) || (body.name ? { id, name: body.name, wasSource: body.source || 'auto-weekly' } : { id, name: `Show ${id}` });
-    const snap = store.snapshotForTrash(id, 'dismissed');
-    if (store.removeShow(id) && snap) trash.add(snap);
-    discovery.markExcluded(id, meta);
-    return sendJson(res, 200, { ok: true, id, kind: 'show', name: meta.name });
+    const info = hideShowById(id, body.name ? { id, name: body.name } : null);
+    return sendJson(res, 200, { ok: true, id, kind: 'show', name: info.name });
   }
 
   if (pathname === '/api/movies' && method === 'GET') {
-    return sendJson(res, 200, movies.listMovies(), req);
+    return sendJson(res, 200, movies.listMovies({ includeHidden: shouldIncludeHidden(searchParams) }), req);
   }
 
   if (pathname === '/api/movies' && method === 'POST') {
@@ -266,7 +281,7 @@ async function handleApi(req, res, url) {
     const id = Number(body.id);
     if (!id) return sendJson(res, 400, { error: 'Missing movie id' });
     if (!tmdb.hasApiKey()) return sendJson(res, 400, { error: 'TMDB API key is required — add it in Settings -> API Keys' });
-    trash.remove('movie', id);
+    hidden.remove('movie', id);
     const movie = await movies.addMovie(id, 'search');
     return sendJson(res, 201, movie);
   }
@@ -275,7 +290,7 @@ async function handleApi(req, res, url) {
   if (mFav && method === 'POST') {
     const body = await readBody(req);
     const movie = movies.setFavorite(mFav[1], body.favorite);
-    if (!movie) return sendJson(res, 404, { error: 'Movie not tracked' });
+    if (!movie) return sendJson(res, 404, { error: 'Movie not found' });
     return sendJson(res, 200, { ok: true, id: movie.id, favorite: movie.favorite, movie });
   }
 
@@ -283,108 +298,42 @@ async function handleApi(req, res, url) {
   if (mExtq && method === 'POST') {
     const body = await readBody(req);
     const movie = movies.setExtQuery(mExtq[1], body.extQuery !== undefined ? body.extQuery : body.tdQuery);
-    if (!movie) return sendJson(res, 404, { error: 'Movie not tracked' });
+    if (!movie) return sendJson(res, 404, { error: 'Movie not found' });
     return sendJson(res, 200, { ok: true, id: movie.id, extQuery: movie.extQuery, movie });
   }
 
   const mDel = pathname.match(/^\/api\/movies\/(\d+)$/);
   if (mDel && method === 'DELETE') {
     const id = Number(mDel[1]);
-    const meta = movies.getMovieMeta(id);
-    const snap = movies.snapshotForTrash(id, 'removed');
-    const ok = movies.removeMovie(id);
-    if (ok && snap) trash.add(snap);
-    return sendJson(res, 200, { ok: true, alreadyRemoved: !ok, id, name: (meta && meta.name) || null });
+    const info = hideMovieById(id);
+    return sendJson(res, 200, { ok: true, alreadyRemoved: !info.ok, id, name: info.name });
   }
 
   const mDismiss = pathname.match(/^\/api\/movies\/(\d+)\/dismiss$/);
   if (mDismiss && method === 'POST') {
     const id = Number(mDismiss[1]);
     const body = await readBody(req).catch(() => ({}));
-    const meta = movies.getMovieMeta(id) || (body.name ? { id, name: body.name, wasSource: body.source || 'auto-weekly' } : { id, name: `Movie ${id}` });
-    const snap = movies.snapshotForTrash(id, 'dismissed');
-    if (movies.removeMovie(id)) {
-      if (snap) trash.add(snap);
-    } else movies.markExcluded(id, meta);
-    return sendJson(res, 200, { ok: true, id, kind: 'movie', name: meta.name });
+    const info = hideMovieById(id, body.name ? { id, name: body.name } : null);
+    return sendJson(res, 200, { ok: true, id, kind: 'movie', name: info.name });
   }
 
-  if (pathname === '/api/trash' && method === 'GET') {
-    return sendJson(res, 200, trash.list(), req);
+  if (pathname === '/api/hidden' && method === 'GET') {
+    return sendJson(res, 200, hidden.list(), req);
   }
 
-  if (pathname === '/api/trash/restore' && method === 'POST') {
+  if (pathname === '/api/hidden/restore' && method === 'POST') {
     const body = await readBody(req);
     const id = Number(body.id);
     const kind = body.kind === 'movie' ? 'movie' : 'show';
     if (!id) return sendJson(res, 400, { error: 'Missing id' });
-    const trashed = trash.take(kind, id);
+    const entry = hidden.take(kind, id);
     let item = null;
     if (kind === 'movie') {
-      const prev = movies.unmarkExcluded(id);
-      item = trashed && trashed.record
-        ? await movies.restoreMovie(trashed.record)
-        : await movies.addMovie(id, (prev && prev.wasSource) || 'search');
+      item = entry && entry.record ? await movies.restoreMovie(entry.record) : await movies.addMovie(id, 'search');
     } else {
-      const prev = discovery.unmarkExcluded(id);
-      item = trashed && trashed.record
-        ? await store.restoreShow(trashed.record)
-        : await store.addShow(id, (prev && prev.wasSource) || 'search');
+      item = entry && entry.record ? await store.restoreShow(entry.record) : await store.addShow(id, 'search');
     }
     return sendJson(res, 200, { ok: true, id, kind, item });
-  }
-
-  const trashDel = pathname.match(/^\/api\/trash\/(show|movie)\/(\d+)$/);
-  if (trashDel && method === 'DELETE') {
-    const kind = trashDel[1];
-    const id = Number(trashDel[2]);
-    const removed = trash.remove(kind, id);
-    if (kind === 'movie') movies.purgeMovieCache(id);
-    else store.purgeShowCache(id);
-    return sendJson(res, 200, { ok: true, removed, kind, id });
-  }
-
-  if (pathname === '/api/trash/empty' && method === 'POST') {
-    const cleared = trash.clear();
-    for (const x of cleared) {
-      if (x.kind === 'movie') movies.purgeMovieCache(x.id);
-      else store.purgeShowCache(x.id);
-    }
-    return sendJson(res, 200, { ok: true, purged: cleared.length });
-  }
-
-  if (pathname === '/api/dismissed/restore' && method === 'POST') {
-    const body = await readBody(req);
-    const id = Number(body.id);
-    const kind = body.kind === 'movie' ? 'movie' : 'show';
-    const readd = body.readd !== false;
-    if (!id) return sendJson(res, 400, { error: 'Missing id' });
-    const trashed = readd ? trash.take(kind, id) : null;
-    let item = null;
-    if (kind === 'movie') {
-      const prev = movies.unmarkExcluded(id);
-      if (readd) {
-        item = trashed && trashed.record
-          ? await movies.restoreMovie(trashed.record)
-          : await movies.addMovie(id, (prev && prev.wasSource) || 'search');
-      }
-    } else {
-      const prev = discovery.unmarkExcluded(id);
-      if (readd) {
-        item = trashed && trashed.record
-          ? await store.restoreShow(trashed.record)
-          : await store.addShow(id, (prev && prev.wasSource) || 'search');
-      }
-    }
-    return sendJson(res, 200, { ok: true, id, kind, readd, item });
-  }
-
-  if (pathname === '/api/dismissed/clear' && method === 'POST') {
-    const body = await readBody(req).catch(() => ({}));
-    const kind = body.kind || 'all';
-    if (kind === 'all' || kind === 'show') discovery.clearExcluded();
-    if (kind === 'all' || kind === 'movie') movies.clearExcluded();
-    return sendJson(res, 200, { ok: true });
   }
 
   if (pathname === '/api/search' && method === 'GET') {
@@ -411,7 +360,8 @@ async function handleApi(req, res, url) {
       200,
       results.map((item) => ({
         ...item,
-        tracked: item.kind === 'movie' ? movies.isTracked(item.id) : store.isTracked(item.id),
+        onCalendar: item.kind === 'movie' ? movies.isTracked(item.id) : store.isTracked(item.id),
+        hidden: item.kind === 'movie' ? hidden.has('movie', item.id) : hidden.has('show', item.id),
       }))
     );
   }
@@ -420,16 +370,27 @@ async function handleApi(req, res, url) {
     const from = searchParams.get('from');
     const to = searchParams.get('to');
     if (!isDate(from) || !isDate(to)) return sendJson(res, 400, { error: 'from/to must be YYYY-MM-DD' });
-    return sendJson(res, 200, { episodes: store.schedule(from, to), movies: movies.schedule(from, to), settings: store.getSettings() }, req);
+    const withSummaries = searchParams.get('summaries') === '1';
+    const includeHidden = shouldIncludeHidden(searchParams);
+    return sendJson(
+      res,
+      200,
+      {
+        episodes: store.schedule(from, to, { withSummaries, includeHidden }),
+        movies: movies.schedule(from, to, { withSummaries, includeHidden }),
+        settings: store.getSettings(),
+      },
+      req
+    );
   }
 
   if (pathname === '/api/status' && method === 'GET') {
     const addr = server.address();
     const urls = addr ? lanUrls(addr.port) : [];
     return sendJson(res, 200, {
-      tracked: store.trackedCount(),
+      showCount: store.activeCount(),
       moviesCount: movies.count(),
-      trashCount: trash.count(),
+      hiddenCount: hidden.count(),
       sync: store.sync,
       discovery: discovery.getStatus(),
       movieDiscovery: movies.getStatus(),
@@ -463,8 +424,8 @@ async function handleApi(req, res, url) {
     const enabled = body.enabled !== undefined ? Boolean(body.enabled) : !discovery.getStatus().enabled;
     const status = discovery.setEnabled(enabled);
     if (enabled) {
-      discovery.runWeeklyDiscovery();
-      if (tmdb.hasApiKey()) movies.runWeeklyMovieDiscovery();
+      discovery.runBiMonthlySync();
+      if (tmdb.hasApiKey()) movies.runBiMonthlySync();
     }
     return sendJson(res, 200, status);
   }
@@ -475,13 +436,13 @@ async function handleApi(req, res, url) {
   }
 
   if (pathname === '/api/discovery/run' && method === 'POST') {
-    const status = discovery.runWeeklyDiscovery({ force: true });
-    const movieStatus = movies.runWeeklyMovieDiscovery({ force: true });
+    const status = discovery.runBiMonthlySync({ force: true });
+    const movieStatus = movies.runBiMonthlySync({ force: true });
     return sendJson(res, 202, { ...status, movies: movieStatus });
   }
 
   if (pathname === '/api/movies/discovery/run' && method === 'POST') {
-    return sendJson(res, 202, movies.runWeeklyMovieDiscovery({ force: true }));
+    return sendJson(res, 202, movies.runBiMonthlySync({ force: true }));
   }
 
   if (pathname === '/api/onboarding/shows' && method === 'GET') {
@@ -506,7 +467,7 @@ async function handleApi(req, res, url) {
           network: (rawShow.network && rawShow.network.name) || (rawShow.webChannel && rawShow.webChannel.name) || null,
           nextAirdate: (episodes[0] && episodes[0].airdate) || cat.fromDate,
           epCount: episodes.length,
-          tracked: store.isTracked(rawShow.id),
+          onCalendar: store.isTracked(rawShow.id),
         })),
       },
       req
@@ -537,17 +498,27 @@ async function handleApi(req, res, url) {
     }));
     const added = store.addShowsBulk(records, 'onboarding');
     for (const r of records) {
-      discovery.unmarkExcluded(r.show.id);
-      trash.remove('show', r.show.id);
+      hidden.remove('show', r.show.id);
     }
     store.saveSettings({ installDate: cat.installDate });
-    if (body.includeMovies && tmdb.hasApiKey()) movies.runWeeklyMovieDiscovery({ force: true });
+    const rulePatch = {};
+    if (langSet.size > 0) rulePatch.languages = [...langSet];
+    if (genreSet.size > 0) rulePatch.genres = [...genreSet];
+    if (Object.keys(rulePatch).length) discovery.setRules(rulePatch);
+    if (body.includeMovies && tmdb.hasApiKey()) movies.runBiMonthlySync({ force: true });
     return sendJson(res, 200, { ok: true, added, installDate: cat.installDate });
   }
 
   if (pathname === '/api/refresh' && method === 'POST') {
     store.refresh({ force: true });
-    return sendJson(res, 202, store.sync);
+    discovery.runBiMonthlySync({ force: true });
+    movies.refreshStale({ force: true });
+    if (tmdb.hasApiKey()) movies.runBiMonthlySync({ force: true });
+    return sendJson(res, 202, {
+      sync: store.sync,
+      discovery: discovery.getStatus(),
+      movieDiscovery: movies.getStatus(),
+    });
   }
 
   return sendJson(res, 404, { error: 'Unknown endpoint' });
@@ -585,22 +556,40 @@ function listen(port, attemptsLeft = 50) {
 }
 
 store.load();
-discovery.load();
 movies.load();
-trash.load();
+hidden.load({
+  activeShowIds: store.activeIds(),
+  activeMovieIds: movies.activeIds(),
+  cacheDir: store.CACHE_DIR,
+});
+discovery.load();
+
+if (!discovery.hasExplicitLanguageRule() && store.activeCount() > 0 && (hidden.wasMigratedFromLegacy() || discovery.hasSavedState())) {
+  const langs = new Set();
+  for (const id of store.activeIds()) {
+    const c = store.getCached(id) || store.loadCachedFromDisk(id);
+    if (c && c.show && c.show.language) langs.add(c.show.language);
+  }
+  if (langs.size > 0 && langs.size <= 5) {
+    discovery.setRules({ languages: [...langs] });
+    console.log(`Seeded TVmaze sync language filter from calendar: ${[...langs].join(', ')}`);
+  }
+}
+
 listen(START_PORT);
 
 if (store.hasSavedList() || movies.hasSavedList() || discovery.hasSavedState()) {
   store.refresh().then(() => {
-    discovery.runWeeklyDiscovery();
-    if (tmdb.hasApiKey()) movies.runWeeklyMovieDiscovery();
+    discovery.runBiMonthlySync();
+    if (tmdb.hasApiKey()) movies.runBiMonthlySync();
   });
+  movies.refreshStale();
 }
 setInterval(() => {
   if (store.hasSavedList() || movies.hasSavedList() || discovery.hasSavedState()) {
     store.refresh().then(() => {
-      discovery.runWeeklyDiscovery();
-      if (tmdb.hasApiKey()) movies.runWeeklyMovieDiscovery();
+      discovery.runBiMonthlySync();
+      if (tmdb.hasApiKey()) movies.runBiMonthlySync();
     });
     movies.refreshStale();
   }

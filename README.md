@@ -23,6 +23,28 @@ Switch to the dedicated **Discover** tab (`D` shortcut) to explore personalized 
 
 ---
 
+## Graxobolt (3D Neural Content Galaxy)
+
+Press **`G`** (or switch to the **Graxobolt** tab) to explore movies, series, cast, showrunners, and story themes inside a real-time 3D WebGL2 universe rendered at up to 60 FPS using bundled Three.js (`public/vendor/three/`) — still with zero `npm install` runtime dependencies:
+
+- **What Graxobolt Maps ([`lib/galaxy.js`](lib/galaxy.js) & [`public/graxobolt.mjs`](public/graxobolt.mjs))**:
+  - **Spheres**: TV shows & movies (emerald orbital ring for watched/seen titles, gold orbital ring for favorites and active seeds).
+  - **Cyan Octahedron Crystals**: Creators, showrunners, directors, and cast linking cross-credited series and films.
+  - **Violet Icosahedron Nebulas**: Narrative story themes & TMDB keywords clustering related titles together.
+  - **Volumetric Nebulas, Synapses & VFX**: Theme-tinted gas clouds, drifting signal pulses along edges, shockwave rings, lightning-arc expansions, starfield dust streaks reacting to warp velocity, and a procedural **Web Audio** sci-fi soundscape (hover tones, warp whooshes, lightning chords — muteable anytime).
+- **Multiple Entry Points**:
+  - **My Universe (Taste Nebula):** Maps your tracked shows/movies, top Discover matches, shared creators/cast, and dominant theme clusters. Enable **Dark Matter** to reveal your hidden items dimly on the outer rim.
+  - **Live Galaxy Search (`/api/galaxy/search`)**: Warp directly to any show, movie, actor, or creator.
+  - **Direct `⚡ 3D` Launches**: Jump straight into a show or movie's constellation from any Episode Modal, Discover Card, or Calendar Search result.
+- **Auto-Dive & First-Person Seed POV**:
+  - With **⚡ Auto-Dive** enabled (default), clicking any show, movie, person, or theme nebula launches a forward warp plunge and automatically **re-seeds `/api/galaxy`** centered on that choice — placing the camera inside its **first-person Seed POV** looking outward down a fan of connected destinations.
+  - Press **`V`** (or click **POV (V)**) anytime inside a seeded constellation to pull out into **Constellation Overview** and back; toggle **⚡ Auto-Dive** off to inspect stars on single-click, bloom **⚡ Expand (+1 Hop)** lightning branches inline (`/api/galaxy/expand`), or double-click to dive. Use the breadcrumb trail to jump back to earlier stars in your journey.
+- **6DoF Navigation & Inline Calendar Actions**:
+  - Drag (`pointer`) pulls the starfield view naturally across `X`/`Y`, **Right-Drag** (or `Ctrl`-Drag) rolls `Z`, scroll/pinch zooms, `WASD` + `Q/E` + `Shift` fly with warp boost, `Space` toggles **Orbit**, and `R` / **Reset** re-centers the camera.
+  - Every Inspector card lets you act directly without leaving 3D space: **`+ Calendar`**, **`♥ Love`**, **`✓ Seen`**, **`× Hide`**, and **`Details`**.
+
+---
+
 ## Calendar & Home-Theater Features
 
 - **Five Calendar Views + Month Picker**: Switch via the icon view bar between **Day** (open episode/movie descriptions and per-episode checkboxes), **Cards**, **Compact**, **Month** (dense show names & event labels), and **Up Next** (rolling **14-day window** `[today .. today + 13]` on the current week).
@@ -35,9 +57,7 @@ Switch to the dedicated **Discover** tab (`D` shortcut) to explore personalized 
 - **`.ics` Calendar Feed & One-Click Backups**:
   - Subscribe or download live RFC 5545 calendar events at `/api/calendar.ics` (supports `?media=shows|both|movies`, `?favorites=1`, and `?download=1`).
   - Export and restore complete portable JSON backups inside **Settings → Calendar Feed (.ics) & Backup** (preserving shows, movies, hidden items, watched state, sync rules, and Discover Taste DNA — with API keys & webhooks stripped by default unless checked).
-- **Graxobolt — 3D Neural Content Galaxy (`G` Tab)**:
-  - Lazy-loaded Three.js WebGL2 interactive 3D universe with theme-synced volumetric nebulas, neural synapse filaments, lightning arc expansions, and synthesized Web Audio sci-fi sound effects (with Mute toggle).
-  - Enter from your full **Taste Nebula**, search/warp to any show, movie, actor, creator, or theme nebula, or launch directly from any Episode Modal, Discover Card, or Search Result (`⚡ 3D`). With **⚡ Auto-Dive** on, clicking any star, person, or theme nebula plunges the camera into its **first-person Seed POV** and re-seeds the constellation outward ahead of you (`V` toggles **POV / Overview**; toggle Auto-Dive off to inspect or **Expand (+1 Hop)** inline).
+- **Graxobolt 3D Explorer (`G` Tab)**: Dedicated Three.js interactive neural galaxy with Auto-Dive POV re-seeding, live +1 hop expansions, inline calendar actions, and procedural Web Audio sound effects (see [Graxobolt](#graxobolt-3d-neural-content-galaxy) above).
 - **10 Visual Themes**: Switch anytime in **Settings** across 5 dark and 5 light themes (`Midnight`, `Grand Bistro`, `Departure Board`, `Silver Screen`, `Broadsheet`, `Blueprint`, `Swiss Atelier`, `Cyber Arcade`, `Greenhouse`, and `Comic Press`).
 - **External Search Customization**: Configure a custom `{query}` search URL template globally in Settings plus per-title custom query overrides in the detail modal.
 - **First-Start Setup & Windows Background Startup**: Includes a guided onboarding wizard on fresh installs and Windows silent login scripts (`scripts/install-startup.cmd` / `npm run startup:install`, removed via `scripts/uninstall-startup.cmd`).
@@ -51,7 +71,7 @@ Switch to the dedicated **Discover** tab (`D` shortcut) to explore personalized 
 | `/` | Focus TVmaze & TMDB search bar |
 | `D` | Switch between **Calendar** and **Discover** tabs |
 | `G` | Open / exit **Graxobolt** 3D Galaxy tab (`1` / `2` / `3` also switch main tabs) |
-| `WASD` / `Q` `E` / `V` / `R` | Fly (`Shift` Warp boost), Up/Down, toggle POV/Overview, and Reset camera inside **Graxobolt** |
+| `WASD` / `Q` `E` / `V` / `R` / `Space` | Fly (`Shift` Warp boost), Up/Down, toggle POV/Overview, Reset camera, and toggle Orbit inside **Graxobolt** |
 | `←` / `→` | Previous / next day, week, or month |
 | `T` | Jump to today / current week |
 | `F` | Toggle **Favorites** filter (Calendar tab) |

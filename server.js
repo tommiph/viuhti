@@ -25,6 +25,7 @@ const alerts = require('./lib/alerts');
 const recommender = require('./lib/recommender');
 const galaxy = require('./lib/galaxy');
 const wiki = require('./lib/wiki');
+const wordpool = require('./lib/wordpool');
 
 tmdb.setKeyProvider(() => store.getTmdbApiKey());
 
@@ -313,12 +314,90 @@ function hideMovieById(id, fallbackMeta = null) {
   return { ok, id, name: meta.name };
 }
 
+function matchShowWordPool(showObj, episodeSummaries = []) {
+  if (!wordpool.hasActiveEntries() || !showObj) return null;
+  const id = showObj.id || showObj.tvmazeId;
+  const cached = id ? store.getCached(id) || store.loadCachedFromDisk(id) : null;
+  const s = (cached && cached.show) || showObj;
+  const deep = id ? recommender.readItemCache(`tv_${id}`) : null;
+  const imdbId = (s.externals && s.externals.imdb) || (deep && deep.imdbId) || showObj.imdbId || null;
+  const wikiDossier = wiki.peekCachedDossier({
+    kind: 'show',
+    name: s.name || showObj.name,
+    year: String(s.premiered || showObj.premiered || '').slice(0, 4),
+    imdbId,
+  });
+  let summary = showObj.summary || s.summary || '';
+  let epSums = episodeSummaries;
+  if (!summary && id) {
+    try {
+      const full = JSON.parse(fs.readFileSync(path.join(store.CACHE_DIR, `${id}.json`), 'utf8'));
+      if (full && full.show) summary = full.show.summary || '';
+      if ((!epSums || !epSums.length) && Array.isArray(full && full.episodes)) {
+        epSums = full.episodes.map((e) => e && e.summary).filter(Boolean).slice(0, 40);
+      }
+    } catch {
+      /* ignore */
+    }
+  }
+  const wp = wordpool.matchItem(
+    {
+      name: s.name || showObj.name,
+      summary,
+      genres: s.genres || showObj.genres || [],
+      keywords: (deep && deep.keywords) || showObj.keywords || [],
+      cast: (deep && deep.cast) || showObj.cast || [],
+      creators: (deep && (deep.creators || deep.crew)) || showObj.creators || [],
+      studios: (deep && deep.studios) || [],
+      channelName: (s.network && s.network.name) || (s.webChannel && s.webChannel.name) || showObj.channelName || '',
+      language: s.language || showObj.language || '',
+      type: s.type || showObj.type || '',
+    },
+    { wikiDossier, episodeSummaries: epSums }
+  );
+  return wp.primary || wp.fuzzy ? wp : null;
+}
+
+function matchMovieWordPool(mvObj) {
+  if (!wordpool.hasActiveEntries() || !mvObj) return null;
+  const id = mvObj.id || mvObj.tmdbId;
+  const det = id ? movies.getMovieDetails(id) : null;
+  const deep = id ? recommender.readItemCache(`tmdb_movie_${id}`) : null;
+  const wikiDossier = wiki.peekCachedDossier({
+    kind: 'movie',
+    name: mvObj.name || (det && det.name),
+    year: String(mvObj.premiered || (det && det.premiered) || '').slice(0, 4),
+    imdbId: (det && det.imdbId) || (deep && deep.imdbId) || mvObj.imdbId || null,
+  });
+  const wp = wordpool.matchItem(
+    {
+      name: mvObj.name || (det && det.name),
+      summary: (det && det.summary) || mvObj.summary || '',
+      genres: mvObj.genres || (det && det.genres) || [],
+      keywords: (deep && deep.keywords) || mvObj.keywords || [],
+      cast: (deep && deep.cast) || mvObj.cast || [],
+      creators: (deep && (deep.creators || deep.crew)) || mvObj.creators || [],
+      studios: (deep && deep.studios) || [],
+      language: mvObj.language || '',
+    },
+    { wikiDossier }
+  );
+  return wp.primary || wp.fuzzy ? wp : null;
+}
+
 async function handleApi(req, res, url) {
   const { pathname, searchParams } = url;
   const method = req.method;
 
   if (pathname === '/api/shows' && method === 'GET') {
-    return sendJson(res, 200, store.listShows({ includeHidden: shouldIncludeHidden(searchParams) }), req);
+    const list = store.listShows({ includeHidden: shouldIncludeHidden(searchParams) });
+    if (wordpool.hasActiveEntries()) {
+      for (const s of list) {
+        const wp = matchShowWordPool(s);
+        if (wp) s.wordPool = wp;
+      }
+    }
+    return sendJson(res, 200, list, req);
   }
 
   if (pathname === '/api/item/rich' && method === 'GET') {
@@ -425,14 +504,21 @@ async function handleApi(req, res, url) {
   }
 
   if (pathname === '/api/movies' && method === 'GET') {
-    return sendJson(res, 200, movies.listMovies({ includeHidden: shouldIncludeHidden(searchParams) }), req);
+    const list = movies.listMovies({ includeHidden: shouldIncludeHidden(searchParams) });
+    if (wordpool.hasActiveEntries()) {
+      for (const m of list) {
+        const wp = matchMovieWordPool(m);
+        if (wp) m.wordPool = wp;
+      }
+    }
+    return sendJson(res, 200, list, req);
   }
 
   if (pathname === '/api/movies' && method === 'POST') {
     const body = await readBody(req);
     const id = Number(body.id);
     if (!id) return sendJson(res, 400, { error: 'Missing movie id' });
-    if (!tmdb.hasApiKey()) return sendJson(res, 400, { error: 'TMDB API key is required — add it in Settings -> API Keys' });
+    if (!tmdb.hasApiKey()) return sendJson(res, 400, { error: 'TMDB API key is required — add it in Control Center -> Sync & API Keys' });
     hidden.remove('movie', id);
     const movie = await movies.addMovie(id, 'search');
     return sendJson(res, 201, movie);
@@ -507,19 +593,63 @@ async function handleApi(req, res, url) {
         if (searchCache.size > 300) searchCache.delete(searchCache.keys().next().value);
       }
     }
-    return sendJson(
-      res,
-      200,
-      results.map((item) => {
-        const meta = item.kind !== 'movie' && store.isTracked(item.id) ? store.getShowMeta(item.id) : null;
-        return {
-          ...item,
-          onCalendar: item.kind === 'movie' ? movies.isTracked(item.id) : store.isTracked(item.id),
-          hidden: item.kind === 'movie' ? hidden.has('movie', item.id) : hidden.has('show', item.id),
-          ...(meta && meta.directorsChoice ? { directorsChoice: meta.directorsChoice } : {}),
-        };
-      })
-    );
+    const qNorm = wordpool.normText(q);
+    const mapped = results.map((item) => {
+      const meta = item.kind !== 'movie' && store.isTracked(item.id) ? store.getShowMeta(item.id) : null;
+      const wp = item.kind === 'movie' ? matchMovieWordPool(item) : matchShowWordPool(item);
+      const isDirectNameMatch = Boolean(qNorm && wordpool.normText(item.name).includes(qNorm));
+      return {
+        ...item,
+        onCalendar: item.kind === 'movie' ? movies.isTracked(item.id) : store.isTracked(item.id),
+        hidden: item.kind === 'movie' ? hidden.has('movie', item.id) : hidden.has('show', item.id),
+        ...(!isDirectNameMatch ? { fuzzyMatch: true, fuzzyLabel: 'Fuzzy Match' } : {}),
+        ...(meta && meta.directorsChoice ? { directorsChoice: meta.directorsChoice } : {}),
+        ...(wp ? { wordPool: wp } : {}),
+      };
+    });
+
+    // Local Fuzzy Match rescue over tracked library & Discover pool (catches typos like "sceubs" or cached lore mentions like "gordon ramsey")
+    const seenIds = new Set(mapped.map((x) => `${x.kind === 'movie' ? 'movie' : 'show'}:${x.id}`));
+    const localPool = [
+      ...store.listShows(),
+      ...movies.listMovies().map((m) => ({ ...m, kind: 'movie' })),
+      ...(recommender.getPoolItems ? recommender.getPoolItems() : []),
+    ];
+    const fuzzyHits = wordpool.searchLocalFuzzy(q, localPool, { wiki, limit: 6 });
+    for (const fh of fuzzyHits) {
+      const it = fh.item;
+      const isMovie = it.kind === 'movie';
+      const itemId = isMovie ? it.tmdbId || it.id : it.tvmazeId || it.id;
+      const sk = `${isMovie ? 'movie' : 'show'}:${itemId}`;
+      if (!itemId || seenIds.has(sk)) continue;
+      seenIds.add(sk);
+      const wp = isMovie ? matchMovieWordPool({ ...it, id: itemId }) : matchShowWordPool({ ...it, id: itemId });
+      const meta = !isMovie && store.isTracked(itemId) ? store.getShowMeta(itemId) : null;
+      mapped.push({
+        id: itemId,
+        kind: isMovie ? 'movie' : 'show',
+        name: it.name,
+        poster: it.poster || null,
+        premiered: it.premiered || null,
+        status: it.status || '',
+        genres: it.genres || [],
+        network: it.network || null,
+        webChannel: it.webChannel || null,
+        channelName: it.channelName || null,
+        summary: it.summary || '',
+        fuzzyMatch: true,
+        fuzzyLabel: 'Fuzzy Match',
+        fuzzyConfidence: fh.confidence,
+        fuzzyField: fh.field,
+        fuzzySnippet: fh.snippet,
+        onCalendar: isMovie ? movies.isTracked(itemId) : store.isTracked(itemId),
+        hidden: isMovie ? hidden.has('movie', itemId) : hidden.has('show', itemId),
+        ...(meta && meta.directorsChoice ? { directorsChoice: meta.directorsChoice } : {}),
+        ...(wp ? { wordPool: wp } : {}),
+      });
+    }
+
+    return sendJson(res, 200, mapped);
   }
 
   if (pathname === '/api/schedule' && method === 'GET') {
@@ -531,12 +661,39 @@ async function handleApi(req, res, url) {
     const includeDirectorsChoice = searchParams.has('directorsChoice')
       ? searchParams.get('directorsChoice') === '1'
       : undefined;
+    const epList = store.schedule(from, to, { withSummaries, includeHidden, includeDirectorsChoice });
+    const mvList = movies.schedule(from, to, { withSummaries, includeHidden });
+    if (wordpool.hasActiveEntries()) {
+      const showWpCache = new Map();
+      for (const ep of epList) {
+        if (!showWpCache.has(ep.showId)) {
+          showWpCache.set(ep.showId, matchShowWordPool({ id: ep.showId }));
+        }
+        const showWp = showWpCache.get(ep.showId);
+        let epWp = null;
+        if (ep.summary || ep.name) {
+          epWp = wordpool.matchItem({ name: ep.name || '', summary: ep.summary || '' });
+        }
+        if ((epWp && (epWp.primary || epWp.fuzzy)) || showWp) {
+          ep.wordPool = {
+            primary: Boolean((epWp && epWp.primary) || (showWp && showWp.primary)),
+            fuzzy: Boolean((epWp && epWp.fuzzy) || (showWp && showWp.fuzzy)),
+            primaryMatches: [...((epWp && epWp.primaryMatches) || []), ...((showWp && showWp.primaryMatches) || [])],
+            fuzzyMatches: [...((epWp && epWp.fuzzyMatches) || []), ...((showWp && showWp.fuzzyMatches) || [])],
+          };
+        }
+      }
+      for (const mv of mvList) {
+        const wp = matchMovieWordPool({ id: mv.movieId, summary: mv.summary || '' });
+        if (wp) mv.wordPool = wp;
+      }
+    }
     return sendJson(
       res,
       200,
       {
-        episodes: store.schedule(from, to, { withSummaries, includeHidden, includeDirectorsChoice }),
-        movies: movies.schedule(from, to, { withSummaries, includeHidden }),
+        episodes: epList,
+        movies: mvList,
         settings: store.getSettings(),
       },
       req
@@ -552,6 +709,7 @@ async function handleApi(req, res, url) {
       moviesCount: movies.count(),
       hiddenCount: hidden.count(),
       watchedCount: watched.count(),
+      wordpool: wordpool.getStats(),
       sync: store.sync,
       discovery: discovery.getStatus(),
       movieDiscovery: movies.getStatus(),
@@ -622,6 +780,7 @@ async function handleApi(req, res, url) {
       watched: watched.exportData(),
       discoveryRules: discovery.getRules(),
       taste: recommender.exportData(),
+      wordpool: wordpool.exportData(),
     };
     const stamp = todayYmd();
     res.writeHead(200, {
@@ -642,6 +801,7 @@ async function handleApi(req, res, url) {
     if (body.hidden) hidden.importData(body.hidden, { replace });
     if (body.watched) watched.importData(body.watched, { replace });
     if (body.taste) recommender.importData(body.taste, { replace });
+    if (body.wordpool) wordpool.importData(body.wordpool, { replace });
     if (body.discoveryRules) discovery.setRules(body.discoveryRules);
     store.importBackup({ shows: body.shows, settings: body.settings }, { replace });
     if (body.movies) movies.importMovies(body.movies, { replace });
@@ -803,9 +963,43 @@ async function handleApi(req, res, url) {
     return sendJson(res, 200, dossier, req);
   }
 
+  if (pathname === '/api/wordpool' && method === 'GET') {
+    const withSuggestions = searchParams.get('suggest') !== '0';
+    return sendJson(
+      res,
+      200,
+      {
+        entries: wordpool.listEntries(),
+        stats: wordpool.getStats(),
+        suggestions: withSuggestions ? wordpool.suggestFromLocal({ store, movies, recommender, wiki, limit: 16 }) : [],
+      },
+      req
+    );
+  }
+
+  if (pathname === '/api/wordpool' && method === 'POST') {
+    const body = await readBody(req).catch(() => ({}));
+    const action = body.action || (body.id ? 'update' : 'add');
+    if (action === 'add') {
+      wordpool.addEntry(body);
+    } else if (action === 'update') {
+      if (!body.id || !wordpool.updateEntry(body.id, body)) return sendJson(res, 404, { error: 'Word Pool entry not found' });
+    } else if (action === 'remove') {
+      wordpool.removeEntry(body.id);
+    } else {
+      return sendJson(res, 400, { error: 'Invalid Word Pool action' });
+    }
+    return sendJson(res, 200, {
+      ok: true,
+      entries: wordpool.listEntries(),
+      stats: wordpool.getStats(),
+      suggestions: wordpool.suggestFromLocal({ store, movies, recommender, wiki, limit: 16 }),
+    });
+  }
+
   if (pathname === '/api/galaxy/search' && method === 'GET') {
     const q = (searchParams.get('q') || '').trim();
-    return sendJson(res, 200, await galaxy.searchEntities(q), req);
+    return sendJson(res, 200, await galaxy.searchEntities(q, { store, movies }), req);
   }
 
   if (pathname === '/api/discovery/toggle' && method === 'POST') {
@@ -950,6 +1144,7 @@ watched.load();
 digest.load();
 alerts.load();
 recommender.load();
+wordpool.load();
 hidden.load({
   activeShowIds: store.activeIds(),
   activeMovieIds: movies.activeIds(),

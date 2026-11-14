@@ -262,6 +262,7 @@ export function mountGraxobolt(container, callbacks) {
           <span class="gb-stats-pill" id="gbStatsPill">60 FPS · 0 Stars</span>
           <button id="gbAutoDiveBtn" class="btn btn-small btn-ghost on" type="button" aria-pressed="true" title="Click any star to dive & re-seed into its POV">⚡ Auto-Dive</button>
           <button id="gbPovBtn" class="btn btn-small btn-ghost on" type="button" aria-pressed="true" title="Toggle Seed POV / Constellation Overview (V)">POV (V)</button>
+          <button id="gbThermalBtn" class="btn btn-small btn-ghost" type="button" aria-pressed="false" title="Toggle Thermal Lens Heatmap (H)">🔥 Thermal</button>
           <button id="gbOrbitBtn" class="btn btn-small btn-ghost" type="button" aria-pressed="false" title="Toggle Auto-Orbit (Space)">Orbit</button>
           <button id="gbDarkMatterBtn" class="btn btn-small btn-ghost" type="button" aria-pressed="false" title="Show Hidden items on the outer rim">Dark Matter</button>
           <button id="gbSoundBtn" class="btn btn-small btn-ghost" type="button" aria-pressed="${sound.enabled}" title="Toggle Procedural Sci-Fi Soundscape">${sound.enabled ? '🔊 Audio' : '🔇 Muted'}</button>
@@ -270,9 +271,10 @@ export function mountGraxobolt(container, callbacks) {
       </div>
 
       <div class="gb-breadcrumbs" id="gbBreadcrumbs" hidden></div>
+      <div class="gb-thermal-bar" id="gbThermalBar" hidden></div>
 
       <div class="gb-hud-controls" id="gbControlsHint">
-        <b>WASD</b> Fly · <b>Q/E</b> Up/Down · <b>Shift</b> Warp · <b>Drag</b> Look · <b>Click</b> Dive POV · <b>V</b> POV/Overview
+        <b>WASD</b> Fly · <b>Q/E</b> Up/Down · <b>Shift</b> Warp · <b>Drag</b> Look · <b>H</b> Thermal · <b>V</b> POV/Overview
       </div>
 
       <div class="gb-inspector" id="gbInspector" hidden></div>
@@ -431,6 +433,7 @@ export function mountGraxobolt(container, callbacks) {
   let autoOrbit = false;
   let autoDive = true;
   let povMode = true;
+  let thermalMode = 'off'; // 'off' | 'affinity' | 'momentum' | 'backlog' | 'lore'
   let diveToken = 0;
   let wikiToken = 0;
   let wikiAbort = null;
@@ -490,7 +493,51 @@ export function mountGraxobolt(container, callbacks) {
   ro.observe(stage);
   resizeRenderer();
 
+  const THERMAL_MODES = [
+    { id: 'affinity', label: 'Affinity Heat', hint: 'Taste DNA resonance & favorites' },
+    { id: 'momentum', label: 'Momentum Heat', hint: 'Premiering, airing, & Director\'s Choice' },
+    { id: 'backlog', label: 'Backlog Heat', hint: 'Unwatched episodes & queued releases' },
+    { id: 'lore', label: 'Word Pool & Lore Heat', hint: 'Primary/Fuzzy matches & cached Wikipedia depth' },
+  ];
+  const THERMAL_STOPS = [
+    [0.0, new THREE.Color('#1d4ed8')],
+    [0.28, new THREE.Color('#06b6d4')],
+    [0.56, new THREE.Color('#f59e0b')],
+    [0.82, new THREE.Color('#ef4444')],
+    [1.0, new THREE.Color('#f472b6')],
+  ];
+
+  function thermalColor(norm) {
+    const t = Math.max(0, Math.min(1, Number(norm) || 0));
+    for (let i = 1; i < THERMAL_STOPS.length; i++) {
+      const [t1, c1] = THERMAL_STOPS[i];
+      if (t <= t1) {
+        const [t0, c0] = THERMAL_STOPS[i - 1];
+        const f = t1 > t0 ? (t - t0) / (t1 - t0) : 1;
+        return c0.clone().lerp(c1, f);
+      }
+    }
+    return THERMAL_STOPS[THERMAL_STOPS.length - 1][1].clone();
+  }
+
+  function nodeHeatValue(nd, metric = thermalMode) {
+    if (!nd || metric === 'off') return 50;
+    if (nd.heat && typeof nd.heat[metric] === 'number') return nd.heat[metric];
+    if (metric === 'lore') {
+      if (nd.wordPool && nd.wordPool.primary) return 100;
+      if (nd.wordPool && nd.wordPool.fuzzy) return 82;
+      return Math.min(80, 22 + (nd.degree || 1) * 10);
+    }
+    if (metric === 'momentum') return nd.directorsChoice ? 92 : 48;
+    if (metric === 'backlog') return nd.seen ? 10 : 62;
+    return nd.favorite || nd.loved ? 95 : nd.matchPct || 55;
+  }
+
   function nodeColor(nd) {
+    if (thermalMode !== 'off') {
+      return thermalColor(nodeHeatValue(nd, thermalMode) / 100);
+    }
+    if (nd.wordPool && nd.wordPool.primary && !nd.hidden) return palette.accent3.clone();
     if (nd.seed) return palette.accent3.clone();
     if (nd.hidden) return new THREE.Color('#64748b');
     if (nd.kind === 'source') return palette.source.clone();
@@ -501,7 +548,10 @@ export function mountGraxobolt(container, callbacks) {
     return palette.accent2.clone().lerp(palette.accent, 0.35);
   }
 
+  let nebulaRecords = [];
+
   function clearSceneGraph() {
+    nebulaRecords = [];
     for (const child of [...nodeGroup.children]) {
       if (child !== reticle && child !== shockRing) {
         if (child.material && child.material.dispose) child.material.dispose();
@@ -571,6 +621,7 @@ export function mountGraxobolt(container, callbacks) {
     aura.scale.set(auraScale, auraScale, 1);
     mesh.add(aura);
     mesh.userData.aura = aura;
+    mesh.userData.baseAuraScale = auraScale;
 
     // Emerald ring indicator for Watched / Seen items, Golden tilted orbit ring for Favorites
     if (nd.seen || nd.favorite || nd.seed) {
@@ -593,11 +644,12 @@ export function mountGraxobolt(container, callbacks) {
   }
 
   function addNebulaCloud(cl, idx) {
-    const tint = idx % 3 === 0 ? palette.accent : idx % 3 === 1 ? palette.accent2 : palette.person;
+    const baseTint = idx % 3 === 0 ? palette.accent : idx % 3 === 1 ? palette.accent2 : palette.person;
+    const layers = [];
     for (let layer = 0; layer < 2; layer++) {
       const mat = new THREE.SpriteMaterial({
         map: nebulaTex,
-        color: tint,
+        color: baseTint,
         transparent: true,
         opacity: layer === 0 ? 0.14 : 0.09,
         blending: THREE.AdditiveBlending,
@@ -608,7 +660,112 @@ export function mountGraxobolt(container, callbacks) {
       sp.scale.set(rad, rad * 0.72, 1);
       sp.position.set(cl.x + (layer ? 4 : -4), cl.y + (layer ? -2 : 2), cl.z);
       nebulaGroup.add(sp);
+      layers.push({ sp, layer });
     }
+    nebulaRecords.push({ cl, idx, baseTint, layers });
+  }
+
+  function renderThermalBar() {
+    const bar = container.querySelector('#gbThermalBar');
+    const btn = container.querySelector('#gbThermalBtn');
+    if (btn) {
+      const active = thermalMode !== 'off';
+      btn.classList.toggle('on', active);
+      btn.setAttribute('aria-pressed', String(active));
+      const curMeta = THERMAL_MODES.find((m) => m.id === thermalMode);
+      btn.textContent = active ? `🔥 ${curMeta ? curMeta.label.replace(' Heat', '') : 'Thermal'}` : '🔥 Thermal';
+    }
+    if (!bar) return;
+    if (thermalMode === 'off') {
+      bar.hidden = true;
+      bar.innerHTML = '';
+      return;
+    }
+    bar.hidden = false;
+    let hottest = null;
+    let maxHeat = -1;
+    for (const nd of graph.nodes) {
+      const v = nodeHeatValue(nd, thermalMode);
+      if (v > maxHeat) {
+        maxHeat = v;
+        hottest = nd;
+      }
+    }
+    bar.innerHTML = `
+      <div class="gb-thermal-modes" role="group" aria-label="Thermal heatmap lens">
+        ${THERMAL_MODES.map(
+          (m) =>
+            `<button type="button" class="gb-tmode-btn${thermalMode === m.id ? ' on' : ''}" data-tmode="${m.id}" title="${esc(m.hint)}">${esc(m.label.replace(' Heat', ''))}</button>`
+        ).join('')}
+        <button type="button" class="gb-tmode-btn off" data-tmode="off" title="Exit Thermal Lens (H)">Off</button>
+      </div>
+      <div class="gb-thermal-scale">
+        <span>0° Cryo</span>
+        <i class="gb-thermal-ramp" aria-hidden="true"></i>
+        <span>100° Hot</span>
+        ${hottest ? `<span class="gb-thermal-hot">Peak: <b>${esc(hottest.name)}</b> (${maxHeat}°)</span>` : ''}
+      </div>`;
+    bar.querySelectorAll('[data-tmode]').forEach((b) =>
+      b.addEventListener('click', () => setThermalMode(b.dataset.tmode))
+    );
+  }
+
+  function applyThermalVisuals() {
+    const isThermal = thermalMode !== 'off';
+    for (const nd of graph.nodes) {
+      if (!nd._mesh) continue;
+      const c = nodeColor(nd);
+      nd._mesh.material.color.copy(c);
+      nd._mesh.material.emissive.copy(c);
+      const norm = isThermal ? nodeHeatValue(nd, thermalMode) / 100 : null;
+      nd._mesh.material.emissiveIntensity = isThermal ? 0.35 + norm * 0.95 : nd.hidden ? 0.25 : nd.seed ? 1.15 : 0.72;
+      const ud = nd._mesh.userData;
+      if (ud && ud.aura) {
+        ud.aura.material.color.copy(c);
+        ud.aura.material.opacity = isThermal ? Math.max(0.14, norm * 0.88) : nd.hidden ? 0.15 : 0.56;
+        const baseS = ud.baseAuraScale || 8.5;
+        const s = isThermal ? baseS * (0.72 + norm * 0.85) : baseS;
+        ud.aura.scale.set(s, s, 1);
+      }
+    }
+
+    for (const rec of nebulaRecords) {
+      const { cl, idx, layers } = rec;
+      const baseTint = idx % 3 === 0 ? palette.accent : idx % 3 === 1 ? palette.accent2 : palette.person;
+      let clusterHeat = 0.45;
+      if (isThermal && graph.nodes.length) {
+        const radSq = Math.pow((cl.radius || 46) * 1.65, 2);
+        let sum = 0;
+        let cnt = 0;
+        for (const nd of graph.nodes) {
+          const dx = (nd.x || 0) - cl.x;
+          const dy = (nd.y || 0) - cl.y;
+          const dz = (nd.z || 0) - cl.z;
+          if (dx * dx + dy * dy + dz * dz <= radSq) {
+            sum += nodeHeatValue(nd, thermalMode) / 100;
+            cnt++;
+          }
+        }
+        if (cnt > 0) clusterHeat = sum / cnt;
+      }
+      const cTint = isThermal ? thermalColor(clusterHeat) : baseTint;
+      for (const { sp, layer } of layers) {
+        sp.material.color.copy(cTint);
+        sp.material.opacity = isThermal
+          ? (layer === 0 ? 0.08 + clusterHeat * 0.22 : 0.05 + clusterHeat * 0.14)
+          : layer === 0
+          ? 0.14
+          : 0.09;
+      }
+    }
+
+    updateEdgeColors();
+    renderThermalBar();
+  }
+
+  function setThermalMode(nextMode) {
+    thermalMode = nextMode === 'off' || !THERMAL_MODES.some((m) => m.id === nextMode) ? 'off' : nextMode;
+    applyThermalVisuals();
   }
 
   function rebuildEdgesAndPulses() {
@@ -699,8 +856,15 @@ export function mountGraxobolt(container, callbacks) {
           : e.rel === 'composer' || e.rel === 'cast' || e.rel === 'cowatch'
           ? hiPerson
           : baseC;
-      const c = active ? relColor : e.rel === 'adapted' || e.rel === 'author' ? hiSource : baseC;
-      const mul = active ? 1.25 : dimmed ? 0.14 : 0.34;
+      const c =
+        thermalMode !== 'off'
+          ? thermalColor((nodeHeatValue(e.a, thermalMode) + nodeHeatValue(e.b, thermalMode)) / 200)
+          : active
+          ? relColor
+          : e.rel === 'adapted' || e.rel === 'author'
+          ? hiSource
+          : baseC;
+      const mul = active ? 1.25 : dimmed ? 0.14 : thermalMode !== 'off' ? 0.56 : 0.34;
       cols[i * 6] = c.r * mul;
       cols[i * 6 + 1] = c.g * mul;
       cols[i * 6 + 2] = c.b * mul;
@@ -761,6 +925,7 @@ export function mountGraxobolt(container, callbacks) {
     }
     renderBreadcrumbs();
     updateStatsPill();
+    applyThermalVisuals();
 
     // Auto-focus seed star cleanly (POV cockpit facing outward, or Constellation Overview)
     const seedNode = graph.nodes.find((n) => n.seed);
@@ -935,6 +1100,7 @@ export function mountGraxobolt(container, callbacks) {
       warpCameraTo(new THREE.Vector3(nd.x, nd.y, nd.z), 96, false);
       sound.playBoltExpand();
       updateStatsPill();
+      applyThermalVisuals();
       breadcrumbs = breadcrumbs.filter((b) => b.key !== nd.key).concat([{ label: nd.name, key: nd.key, kind: nd.kind, seed: seedParamsForNode(nd) }]).slice(-6);
       renderBreadcrumbs();
       toast(`⚡ Bloomed +${added.length} new stars from ${nd.name}`, 'ok');
@@ -1101,7 +1267,10 @@ export function mountGraxobolt(container, callbacks) {
         <div style="min-width:0;flex:1">
           <div class="gb-ins-badges">
             <span class="gb-type-tag ${esc(nd.kind)}">${esc(typeLabel)}</span>
+            ${nd.wordPool && nd.wordPool.primary ? `<span class="wp-badge primary" title="Strict Primary Override*">★ Primary</span>` : ''}
+            ${nd.wordPool && nd.wordPool.fuzzy ? `<span class="wp-badge fuzzy" title="${esc(((nd.wordPool.fuzzyMatches || [])[0] && (nd.wordPool.fuzzyMatches[0].snippet || nd.wordPool.fuzzyMatches[0].term)) || 'Fuzzy Match')}">Fuzzy Match</span>` : ''}
             ${nd.matchPct ? `<span class="disc-match-pill">${nd.matchPct}% Match</span>` : ''}
+            ${thermalMode !== 'off' ? `<span class="gb-heat-pill">🔥 ${nodeHeatValue(nd, thermalMode)}°</span>` : ''}
             ${nd.tracked ? '<span class="gb-state-tag ok">On Calendar</span>' : ''}
             ${nd.seen && !nd.tracked ? '<span class="gb-state-tag">Seen</span>' : ''}
           </div>
@@ -1287,7 +1456,7 @@ export function mountGraxobolt(container, callbacks) {
   let touchPinchDist = 0;
 
   function isInteractiveUi(target) {
-    return Boolean(target && target.closest('.gb-hud-top, #gbBreadcrumbs, #gbInspector, #gbLoading, .gb-hud-controls'));
+    return Boolean(target && target.closest('.gb-hud-top, #gbBreadcrumbs, #gbThermalBar, #gbInspector, #gbLoading, .gb-hud-controls'));
   }
 
   function applyPinchDolly(deltaPx) {
@@ -1502,6 +1671,10 @@ export function mountGraxobolt(container, callbacks) {
       resetCamera();
     } else if (k === 'v') {
       togglePov();
+    } else if (k === 'h') {
+      const order = ['off', 'affinity', 'momentum', 'backlog', 'lore'];
+      const next = order[(order.indexOf(thermalMode) + 1) % order.length];
+      setThermalMode(next);
     } else if (e.code === 'Space') {
       e.preventDefault();
       autoOrbit = !autoOrbit;
@@ -1524,6 +1697,9 @@ export function mountGraxobolt(container, callbacks) {
     e.currentTarget.setAttribute('aria-pressed', String(autoDive));
   });
   container.querySelector('#gbPovBtn').addEventListener('click', () => togglePov());
+  container.querySelector('#gbThermalBtn').addEventListener('click', () => {
+    setThermalMode(thermalMode === 'off' ? 'affinity' : 'off');
+  });
   container.querySelector('#gbResetCamBtn').addEventListener('click', () => resetCamera());
   container.querySelector('#gbOrbitBtn').addEventListener('click', (e) => {
     autoOrbit = !autoOrbit;
@@ -1565,7 +1741,7 @@ export function mountGraxobolt(container, callbacks) {
               (x, idx) => `
             <button type="button" class="gb-sr-item" data-idx="${idx}">
               ${x.poster ? `<img src="${esc(x.poster)}" alt="">` : `<span class="gb-sr-ph">${x.seedKind === 'person' ? '👤' : '✦'}</span>`}
-              <span class="gb-sr-txt"><b>${esc(x.name)}</b><small>${esc(x.sub)}</small></span>
+              <span class="gb-sr-txt"><b>${esc(x.name)} ${x.fuzzyMatch ? '<span class="wp-badge fuzzy">Fuzzy Match</span>' : ''}</b><small>${esc(x.sub)}</small></span>
             </button>`
             )
             .join('');
@@ -1758,8 +1934,11 @@ export function mountGraxobolt(container, callbacks) {
       }
       el.style.display = 'inline-flex';
       el.dataset.key = c.nd.key;
-      el.className = `gb-label ${c.nd.kind}${c.nd.key === selectedKey ? ' on' : ''}${c.nd.favorite ? ' fav' : ''}`;
-      el.textContent = c.nd.name;
+      const wpCls = c.nd.wordPool ? `${c.nd.wordPool.primary ? ' wp-pri' : ''}${c.nd.wordPool.fuzzy ? ' wp-fuz' : ''}` : '';
+      const nextCls = `gb-label ${c.nd.kind}${c.nd.key === selectedKey ? ' on' : ''}${c.nd.favorite ? ' fav' : ''}${wpCls}`;
+      if (el.className !== nextCls) el.className = nextCls;
+      const labelTxt = thermalMode !== 'off' ? `${c.nd.name} · ${nodeHeatValue(c.nd, thermalMode)}°` : c.nd.name;
+      if (el.textContent !== labelTxt) el.textContent = labelTxt;
       const op = c.isPin ? 1 : Math.max(0.28, Math.min(0.95, 1.15 - c.dist / 240));
       el.style.opacity = op.toFixed(2);
       el.style.transform = `translate3d(${Math.round(c.sx)}px, ${Math.round(c.sy - 14)}px, 0) translate(-50%, -100%)`;
@@ -1800,14 +1979,7 @@ export function mountGraxobolt(container, callbacks) {
       scene.fog = new THREE.FogExp2(palette.bg.getHex(), 0.0022);
       coreLight.color.copy(palette.accent);
       rimLight.color.copy(palette.accent2);
-      for (const nd of graph.nodes) {
-        if (nd._mesh) {
-          const c = nodeColor(nd);
-          nd._mesh.material.color.copy(c);
-          nd._mesh.material.emissive.copy(c);
-        }
-      }
-      updateEdgeColors();
+      applyThermalVisuals();
     },
     destroy() {
       paused = true;

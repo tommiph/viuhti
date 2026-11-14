@@ -207,7 +207,13 @@
     movieEvents: [],
     groups: new Map(), // key -> group (for modal lookup)
     media: store.get('media', 'shows'), // 'shows' | 'both' | 'movies'
-    drawerMedia: 'settings', // 'settings' | 'hidden'
+    drawerMedia: 'wordpool', // 'wordpool' | 'appearance' | 'sync' | 'alerts' | 'feeds' | 'hidden'
+    wordpool: {
+      entries: [],
+      stats: { total: 0, active: 0, primary: 0, fuzzy: 0, exclude: 0 },
+      suggestions: [],
+      loaded: false,
+    },
     filter: store.get('filter', 'all'),
     genre: store.get('genre', ''),
     channel: store.get('channel', ''),
@@ -298,6 +304,32 @@
   applyTheme(state.settings.style);
 
   // ---------- Data loading ----------
+  function updateWordPoolCounters() {
+    const active = (state.wordpool && state.wordpool.stats && state.wordpool.stats.active) || 0;
+    for (const sel of ['#topWpCount', '#ccWpCount']) {
+      const el = $(sel);
+      if (!el) continue;
+      el.textContent = active;
+      el.hidden = active === 0;
+    }
+  }
+
+  async function loadWordPool(suggest = true) {
+    try {
+      const data = await api(`/api/wordpool?suggest=${suggest ? '1' : '0'}`);
+      state.wordpool = {
+        entries: data.entries || [],
+        stats: data.stats || { total: 0, active: 0, primary: 0, fuzzy: 0, exclude: 0 },
+        suggestions: data.suggestions || [],
+        loaded: true,
+      };
+      updateWordPoolCounters();
+      if ($('#drawer').classList.contains('open')) renderWordPoolSettings();
+    } catch {
+      /* ignore non-fatal wordpool fetch error */
+    }
+  }
+
   function updateHiddenUi() {
     const n = state.hiddenItems.length;
     for (const sel of ['#topHiddenCount', '#drawerHiddenCount']) {
@@ -306,6 +338,7 @@
       el.textContent = n;
       el.hidden = n === 0;
     }
+    updateWordPoolCounters();
     const bar = $('#hiddenBar');
     if (bar) bar.hidden = state.drawerMedia !== 'hidden';
     const sum = $('#hiddenSummary');
@@ -323,6 +356,7 @@
 
   async function loadShows() {
     const [showList, movieList, hiddenList] = await Promise.all([api('/api/shows'), api('/api/movies'), api('/api/hidden')]);
+    loadWordPool(false);
     state.shows = new Map(showList.map((s) => [s.id, { ...s, kind: 'show' }]));
     state.movies = new Map(movieList.map((m) => [m.id, { ...m, kind: 'movie' }]));
     state.hiddenItems = hiddenList || [];
@@ -484,8 +518,39 @@
     return fmtTime(d);
   }
 
-  function matchesCalendarFilters(item) {
+  function itemWordPool(item, eps = []) {
+    const base = (item && item.wordPool) || {};
+    const epHits = (eps || []).map((e) => e && e.wordPool).filter(Boolean);
+    const primaryMatches = [...(base.primaryMatches || []), ...epHits.flatMap((x) => x.primaryMatches || [])];
+    const fuzzyMatches = [...(base.fuzzyMatches || []), ...epHits.flatMap((x) => x.fuzzyMatches || [])];
+    return {
+      primary: Boolean(base.primary || epHits.some((x) => x.primary) || primaryMatches.length),
+      fuzzy: Boolean(base.fuzzy || epHits.some((x) => x.fuzzy) || fuzzyMatches.length),
+      primaryMatches,
+      fuzzyMatches,
+    };
+  }
+
+  function wpBadgesHtml(item, eps = [], compact = false) {
+    const wp = itemWordPool(item, eps);
+    const pills = [];
+    if (wp.primary) {
+      const terms = [...new Set(wp.primaryMatches.map((m) => m.term))];
+      const tip = `Primary Override* (${terms.join(', ') || 'strict match'}) — overrides Sync, Discover & Calendar filters`;
+      pills.push(`<span class="wp-badge primary" title="${esc(tip)}">${compact ? '★ Primary' : '★ Primary Override'}</span>`);
+    }
+    if (wp.fuzzy) {
+      const top = wp.fuzzyMatches[0];
+      const terms = [...new Set(wp.fuzzyMatches.map((m) => m.term))];
+      const tip = `Fuzzy Match: ${terms.join(', ')}${top && top.field ? ` in ${top.field}` : ''}${top && top.snippet ? ` — ${top.snippet}` : ''}`;
+      pills.push(`<span class="wp-badge fuzzy" title="${esc(tip)}">Fuzzy Match</span>`);
+    }
+    return pills.join('');
+  }
+
+  function matchesCalendarFilters(item, eps = []) {
     if (!item || item.pending) return false;
+    if (itemWordPool(item, eps).primary) return true; // *Primary strict override bypasses non-hidden Calendar filters
     const src = sourceOf(item);
     if (state.filter === 'tv' && src.kind !== 'tv') return false;
     if (state.filter === 'stream' && src.kind !== 'stream') return false;
@@ -506,7 +571,7 @@
         if (ep.virtual && !state.showDirectorsChoice) continue;
         if (state.hideWatched && ep.watched) continue;
         const show = state.shows.get(ep.showId);
-        if (!matchesCalendarFilters(show)) continue;
+        if (!matchesCalendarFilters(show, [ep])) continue;
         const key = dayKeyOf(ep);
         const day = days.get(key);
         if (!day) continue;
@@ -519,7 +584,7 @@
       for (const ev of state.movieEvents) {
         if (state.hideWatched && ev.watched) continue;
         const movie = state.movies.get(ev.movieId);
-        if (!matchesCalendarFilters(movie)) continue;
+        if (!matchesCalendarFilters(movie, [ev])) continue;
         const day = days.get(ev.airdate);
         if (!day) continue;
         const gk = `m:${ev.airdate}:${ev.movieId}`;
@@ -714,6 +779,8 @@
       ? `${eps.length} episodes`
       : first.name || 'TBA';
     const { primary, isNew, isDc, dcYear } = groupBadges(g);
+    const wpHtml = wpBadgesHtml(show, eps, true);
+    const wpRowHtml = wpBadgesHtml(show, eps, false);
     const interests = matchedInterests(show);
     const isPrem = Boolean(primary && (primary.cls === 'series-prem' || primary.cls === 'season-prem'));
     const aired = !isMovie && first.airstamp && Date.parse(first.airstamp) < Date.now();
@@ -730,6 +797,7 @@
       : '';
     const inlineBadges = isCompact
       ? [
+          wpHtml,
           isHidden ? '<span class="hidden-pill">Hidden</span>' : '',
           w.partial ? `<span class="watch-prog">${w.done}/${w.total} ✓</span>` : '',
           isDc ? dcBadgeHtml(dcYear, true) : '',
@@ -758,6 +826,7 @@
             </div>
           </div>
           ${inlineBadges ? `<div class="ep-compact-pills">${inlineBadges}</div>` : ''}
+          ${!isCompact && wpRowHtml ? `<div class="ep-compact-pills">${wpRowHtml}</div>` : ''}
           ${!isCompact && w.partial ? `<div><span class="watch-prog">${w.done}/${w.total} watched</span></div>` : ''}
           ${interests.length ? interestPillsHtml(interests, isPrem) : ''}
           <div class="ep-title">${isCompact ? `<span class="ep-ctime">${esc(time)}</span>` : ''}${isMovie ? '' : `<span class="code">${esc(code)}</span>`}${esc(title)}</div>
@@ -810,6 +879,7 @@
           <div class="agenda-title">
             <div class="agenda-title-main">
               <span class="name">${esc(show.name)}</span>
+              ${wpBadgesHtml(show, eps, true)}
               ${isHidden ? '<span class="hidden-pill">Hidden</span>' : ''}
               ${w.partial ? `<span class="watch-prog">${w.done}/${w.total} ✓</span>` : ''}
               ${isDc ? dcBadgeHtml(dcYear, true) : ''}
@@ -952,6 +1022,7 @@
             </div>
           </div>
           <div class="day-card-meta">
+            ${wpBadgesHtml(show, eps, false)}
             ${isHidden ? '<span class="hidden-pill">Hidden</span>' : ''}
             ${w.partial ? `<span class="watch-prog">${w.done}/${w.total} watched</span>` : ''}
             ${srcBadge(src.name, src.kind)}
@@ -989,6 +1060,7 @@
       : epCode(first);
     const labels = [
       `<span class="m-lbl">${esc(code)}</span>`,
+      wpBadgesHtml(show, eps, true),
       w.allDone ? '<span class="m-lbl" title="Watched">✓</span>' : w.partial ? `<span class="m-lbl">${w.done}/${w.total}</span>` : '',
       isHidden ? '<span class="hidden-pill">Hidden</span>' : '',
       isDc ? dcBadgeHtml(dcYear, true) : '',
@@ -1191,7 +1263,7 @@
   }
 
   function openApiKeysDrawer() {
-    openDrawer('settings');
+    openDrawer('sync');
     requestAnimationFrame(() => $('#tmdbKeyInput')?.focus());
   }
 
@@ -2038,7 +2110,7 @@
 
     $('#modalExtSetupBtn')?.addEventListener('click', () => {
       closeModal();
-      openDrawer('settings');
+      openDrawer('feeds');
       requestAnimationFrame(() => $('#extUrlInput')?.focus());
     });
     $('#modalGraxoboltBtn')?.addEventListener('click', () => {
@@ -2351,14 +2423,18 @@
           <div class="sr-item${i === 0 ? ' active' : ''}" data-idx="${i}" role="option">
             ${s.poster ? `<img src="${esc(s.poster)}" alt="" loading="lazy">` : '<div class="ph"></div>'}
             <div style="min-width:0">
-              <div class="sr-name">${esc(s.name)} ${year ? `<span class="year">(${year})</span>` : ''}</div>
+              <div class="sr-name">
+                ${esc(s.name)} ${year ? `<span class="year">(${year})</span>` : ''}
+                ${s.wordPool && s.wordPool.primary ? '<span class="wp-badge primary" title="Primary Strict Override*">★ Primary</span>' : ''}
+                ${s.fuzzyMatch || (s.wordPool && s.wordPool.fuzzy) ? `<span class="wp-badge fuzzy" title="${esc(s.fuzzySnippet ? `Fuzzy Match in ${s.fuzzyField}: ${s.fuzzySnippet}` : 'Fuzzy Match')}">Fuzzy Match</span>` : ''}
+              </div>
               <div class="sr-meta">
                 ${isMovie ? '<span class="movie-pill">Movie</span>' : src.name !== 'Unknown' ? srcBadge(src.name, src.kind) : ''}
                 ${src.country ? `<span>${esc(src.country)}</span>` : ''}
                 <span><span class="status-dot ${/running|released/i.test(s.status) ? 'running' : /ended/i.test(s.status) ? 'ended' : 'tbd'}"></span> ${esc(s.status || '')}</span>
                 ${s.genres && s.genres.length ? `<span>· ${esc(s.genres.slice(0, 2).join(', '))}</span>` : ''}
               </div>
-              ${s.summary ? `<div class="sr-summary">${esc(stripHtml(s.summary))}</div>` : ''}
+              ${s.fuzzySnippet ? `<div class="sr-summary"><b>Match (${esc(s.fuzzyField || 'text')}):</b> ${esc(s.fuzzySnippet)}</div>` : s.summary ? `<div class="sr-summary">${esc(stripHtml(s.summary))}</div>` : ''}
             </div>
             <div class="sr-acts">
               ${!isMovie ? `<button class="sr-dc-btn${s.directorsChoice && s.directorsChoice.enabled ? ' on' : ''}" data-idx="${i}" type="button" title="Director's Choice Virtual Release (start S01E01 today)">🎬 DC</button>` : ''}
@@ -2503,20 +2579,223 @@
     if (!e.target.closest('#searchBox')) searchResults.hidden = true;
   });
 
-  // ---------- Settings & Hidden drawer ----------
+  // ---------- Control Center (Word Pool, Preferences, Sync, Alerts, Feeds & Hidden) ----------
+  const VALID_CC_TABS = new Set(['wordpool', 'appearance', 'sync', 'alerts', 'feeds', 'hidden']);
+  let wpComposerMode = 'primary';
+
   function setDrawerTab(tab) {
-    const next = tab === 'hidden' ? 'hidden' : 'settings';
+    const mapped = tab === 'settings' ? 'wordpool' : tab;
+    const next = VALID_CC_TABS.has(mapped) ? mapped : 'wordpool';
     state.drawerMedia = next;
-    $$('#drawerMediaSeg button').forEach((x) => x.classList.toggle('on', x.dataset.value === next));
+    $$('#ccNav [data-cc-tab]').forEach((x) => {
+      const on = x.dataset.ccTab === next;
+      x.classList.toggle('on', on);
+      x.setAttribute('aria-selected', String(on));
+    });
+    $$('#ccPanels [data-cc-panel]').forEach((p) => {
+      p.hidden = p.dataset.ccPanel !== next;
+    });
     $('#drawer').classList.toggle('drawer-in-hidden', next === 'hidden');
+    if (next === 'wordpool' && !state.wordpool.loaded) loadWordPool(true);
     updateHiddenUi();
     renderHiddenDrawer();
+  }
+
+  function renderWordPoolSettings() {
+    const box = $('#wordPoolBox');
+    if (!box) return;
+    const entries = state.wordpool.entries || [];
+    const stats = state.wordpool.stats || { total: 0, active: 0, primary: 0, fuzzy: 0, exclude: 0 };
+    const suggestions = state.wordpool.suggestions || [];
+
+    box.innerHTML = `
+      <div class="wp-header">
+        <div>
+          <div class="api-keys-head">
+            <span class="lan-label">Word Pool Enrichment &amp; Override Engine</span>
+            <span class="api-key-badge ${stats.active ? 'ok' : 'muted'}">${stats.active} Active</span>
+          </div>
+          <p class="wp-lead">Add actors, creators, themes, or mentions (such as <b>Gordon Ramsay</b> or <b>Scrubs</b>) to match locally across cached TVmaze, TMDB &amp; Wikipedia dossiers with zero extra polling.</p>
+        </div>
+        <div class="wp-stats-row">
+          <span class="wp-badge primary">★ ${stats.primary} Primary*</span>
+          <span class="wp-badge fuzzy">${stats.fuzzy} Fuzzy Match</span>
+          <span class="wp-badge exclude">${stats.exclude} NO Exclude</span>
+        </div>
+      </div>
+
+      <form class="wp-form" id="wpAddForm">
+        <div class="wp-mode-seg" role="group" aria-label="Word Pool matching mode">
+          <button type="button" class="wp-mode-btn${wpComposerMode === 'primary' ? ' on primary' : ''}" data-wp-mode="primary">★ Primary Override* (Strict)</button>
+          <button type="button" class="wp-mode-btn${wpComposerMode === 'fuzzy' ? ' on fuzzy' : ''}" data-wp-mode="fuzzy">Fuzzy Match</button>
+          <button type="button" class="wp-mode-btn${wpComposerMode === 'exclude' ? ' on exclude' : ''}" data-wp-mode="exclude">NO Exclude</button>
+        </div>
+        <div class="wp-input-row">
+          <input id="wpTermInput" type="text" autocomplete="off" spellcheck="false" placeholder="Term or phrase (supports: detective NO reality)…" aria-label="Word Pool term" required />
+          <button type="submit" class="btn btn-small" id="wpAddBtn">+ Add Rule</button>
+        </div>
+        <div class="wp-extra-row">
+          <input id="wpAliasesInput" type="text" autocomplete="off" spellcheck="false" placeholder="Optional aliases (comma-separated)…" aria-label="Optional aliases" />
+          <input id="wpExcludesInput" type="text" autocomplete="off" spellcheck="false" placeholder="Optional NO exclusions (e.g. reality, clip show)…" aria-label="Optional NO exclusions" />
+        </div>
+        <div class="wp-footnote">
+          <b>*Primary Override scope:</b> Strict whole-word/phrase match (no typo slop) that overrides Auto-Sync filters, Discover lens/score penalties, and Calendar filters so matching titles always appear (user-Hidden shows remain blocked unless unhidden).<br>
+          <b>Fuzzy Match:</b> Typo-tolerant &amp; mention matcher (catches casual mentions like <code>gordon ramsey</code> or typos like <code>sceubs</code> → <i>Scrubs</i>) labeled uniformly as <span class="wp-badge fuzzy">Fuzzy Match</span>.
+        </div>
+      </form>
+
+      ${
+        suggestions.length
+          ? `<div class="wp-suggest-sec">
+              <div class="lan-label">Suggested from Your Library &amp; Cached Lore (click to add)</div>
+              <div class="wp-suggest-chips">
+                ${suggestions
+                  .slice(0, 12)
+                  .map(
+                    (s) =>
+                      `<button type="button" class="gchip wp-sug-chip" data-wp-suggest="${esc(s.term)}" title="Score ${s.score} · Add to Word Pool as ${wpComposerMode === 'primary' ? 'Primary*' : wpComposerMode === 'exclude' ? 'NO Exclude' : 'Fuzzy Match'}">+ ${esc(s.term)}</button>`
+                  )
+                  .join('')}
+              </div>
+            </div>`
+          : ''
+      }
+
+      <div class="wp-list-sec">
+        <div class="api-keys-head">
+          <span class="lan-label">Configured Word Rules (${entries.length})</span>
+        </div>
+        ${
+          entries.length
+            ? `<ul class="wp-list">
+                ${entries
+                  .map(
+                    (e) => `
+                  <li class="wp-item${e.enabled ? '' : ' is-off'}" data-wp-id="${esc(e.id)}">
+                    <label class="switch" title="${e.enabled ? 'Disable rule' : 'Enable rule'}">
+                      <input type="checkbox" class="wp-toggle-chk" data-wp-toggle="${esc(e.id)}"${e.enabled ? ' checked' : ''} />
+                      <span class="switch-track"></span>
+                    </label>
+                    <div class="wp-item-main">
+                      <div class="wp-item-top">
+                        <span class="wp-term">${esc(e.term)}</span>
+                        <span class="wp-badge ${esc(e.mode)}">${e.mode === 'primary' ? '★ Primary Override*' : e.mode === 'exclude' ? 'NO Exclude' : 'Fuzzy Match'}</span>
+                      </div>
+                      ${
+                        (e.aliases && e.aliases.length) || (e.excludeTerms && e.excludeTerms.length)
+                          ? `<div class="wp-item-sub">
+                              ${e.aliases && e.aliases.length ? `<span><b>Aliases:</b> ${esc(e.aliases.join(', '))}</span>` : ''}
+                              ${e.excludeTerms && e.excludeTerms.length ? `<span><b>NO:</b> ${esc(e.excludeTerms.join(', '))}</span>` : ''}
+                            </div>`
+                          : ''
+                      }
+                    </div>
+                    <button type="button" class="icon-btn wp-del-btn" data-wp-del="${esc(e.id)}" title="Remove rule" aria-label="Remove ${esc(e.term)}">×</button>
+                  </li>`
+                  )
+                  .join('')}
+              </ul>`
+            : `<div class="sr-empty">No Word Pool rules yet — add a <b>Primary Override*</b> (strict) or <b>Fuzzy Match</b> above, or click a local suggestion.</div>`
+        }
+      </div>`;
+
+    const applyWordPoolResponse = async (res, msg) => {
+      state.wordpool = {
+        entries: res.entries || [],
+        stats: res.stats || { total: 0, active: 0, primary: 0, fuzzy: 0, exclude: 0 },
+        suggestions: res.suggestions || state.wordpool.suggestions || [],
+        loaded: true,
+      };
+      updateWordPoolCounters();
+      renderWordPoolSettings();
+      renderHiddenDrawer();
+      if (msg) toast(msg, 'ok');
+      await reloadAll();
+      if (state.tab === 'discover') loadDiscover(false);
+      if (gbController) gbController.loadTaste();
+    };
+
+    $$('[data-wp-mode]', box).forEach((b) =>
+      b.addEventListener('click', () => {
+        wpComposerMode = b.dataset.wpMode;
+        renderWordPoolSettings();
+        $('#wpTermInput', box)?.focus();
+      })
+    );
+
+    $('#wpAddForm', box)?.addEventListener('submit', async (ev) => {
+      ev.preventDefault();
+      const term = $('#wpTermInput', box).value.trim();
+      if (!term) return;
+      const aliases = $('#wpAliasesInput', box).value.trim();
+      const excludeTerms = $('#wpExcludesInput', box).value.trim();
+      const btn = $('#wpAddBtn', box);
+      if (btn) btn.disabled = true;
+      try {
+        const res = await api('/api/wordpool', {
+          method: 'POST',
+          body: JSON.stringify({ action: 'add', term, mode: wpComposerMode, aliases, excludeTerms }),
+        });
+        await applyWordPoolResponse(res, `Added ${wpComposerMode === 'primary' ? 'Primary*' : wpComposerMode === 'exclude' ? 'NO Exclude' : 'Fuzzy Match'} rule "${term}"`);
+      } catch (err) {
+        toast(err.message, 'err');
+      } finally {
+        if (btn) btn.disabled = false;
+      }
+    });
+
+    $$('[data-wp-suggest]', box).forEach((b) =>
+      b.addEventListener('click', async () => {
+        const term = b.dataset.wpSuggest;
+        b.disabled = true;
+        try {
+          const res = await api('/api/wordpool', {
+            method: 'POST',
+            body: JSON.stringify({ action: 'add', term, mode: wpComposerMode }),
+          });
+          await applyWordPoolResponse(res, `Added "${term}" to Word Pool`);
+        } catch (err) {
+          toast(err.message, 'err');
+          b.disabled = false;
+        }
+      })
+    );
+
+    $$('[data-wp-toggle]', box).forEach((chk) =>
+      chk.addEventListener('change', async () => {
+        try {
+          const res = await api('/api/wordpool', {
+            method: 'POST',
+            body: JSON.stringify({ action: 'update', id: chk.dataset.wpToggle, enabled: chk.checked }),
+          });
+          await applyWordPoolResponse(res, chk.checked ? 'Word Pool rule enabled' : 'Word Pool rule paused');
+        } catch (err) {
+          toast(err.message, 'err');
+        }
+      })
+    );
+
+    $$('[data-wp-del]', box).forEach((b) =>
+      b.addEventListener('click', async () => {
+        try {
+          const res = await api('/api/wordpool', {
+            method: 'POST',
+            body: JSON.stringify({ action: 'remove', id: b.dataset.wpDel }),
+          });
+          await applyWordPoolResponse(res, 'Removed Word Pool rule');
+        } catch (err) {
+          toast(err.message, 'err');
+        }
+      })
+    );
   }
 
   function openDrawer(tab = null) {
     $('#drawer').classList.add('open');
     $('#drawer').setAttribute('aria-hidden', 'false');
     $('#drawerScrim').hidden = false;
+    loadWordPool(true);
+    renderWordPoolSettings();
     renderThemeSettings(state.settings);
     renderApiKeysSettings(state.settings);
     renderInterestsSettings();
@@ -2530,7 +2809,7 @@
     } else {
       pollStatus();
     }
-    setDrawerTab(tab || 'settings');
+    setDrawerTab(tab || state.drawerMedia || 'wordpool');
   }
   function closeDrawer() {
     $('#drawer').classList.remove('open');
@@ -2610,7 +2889,8 @@
       list.innerHTML = '';
       const activeShowCount = [...state.shows.values()].filter((s) => !s.hidden).length;
       const activeMovieCount = [...state.movies.values()].filter((m) => !m.hidden).length;
-      $('#drawerSub').textContent = `${activeShowCount} show${activeShowCount === 1 ? '' : 's'} · ${activeMovieCount} movie${activeMovieCount === 1 ? '' : 's'} · ${state.hiddenItems.length} hidden`;
+      const wpActive = (state.wordpool && state.wordpool.stats && state.wordpool.stats.active) || 0;
+      $('#drawerSub').textContent = `${activeShowCount} show${activeShowCount === 1 ? '' : 's'} · ${activeMovieCount} movie${activeMovieCount === 1 ? '' : 's'} · ${wpActive} word rule${wpActive === 1 ? '' : 's'} · ${state.hiddenItems.length} hidden`;
       return;
     }
     const q = $('#showFilter').value.trim().toLowerCase();
@@ -2625,11 +2905,11 @@
       await unhideItem(Number(unhideBtn.dataset.hiddenUnhide), unhideBtn.dataset.name || 'item', unhideBtn.dataset.kind || 'show');
     }
   });
-  $$('#drawerMediaSeg button').forEach((b) =>
-    b.addEventListener('click', () => setDrawerTab(b.dataset.value))
+  $$('#ccNav [data-cc-tab]').forEach((b) =>
+    b.addEventListener('click', () => setDrawerTab(b.dataset.ccTab))
   );
   $('#showFilter').addEventListener('input', renderHiddenDrawer);
-  $('#myShowsBtn').addEventListener('click', () => openDrawer('settings'));
+  $('#myShowsBtn').addEventListener('click', () => openDrawer(state.drawerMedia === 'hidden' ? 'wordpool' : state.drawerMedia));
   $('#hiddenTopBtn').addEventListener('click', () => openDrawer('hidden'));
   $('#drawerClose').addEventListener('click', closeDrawer);
   $('#drawerScrim').addEventListener('click', closeDrawer);
@@ -4020,6 +4300,9 @@
           </div>
         </div>
         <div class="disc-hero-right">
+          <button id="discWordPoolBtn" class="btn btn-small btn-ghost" type="button" title="Configure Primary* strict & Fuzzy Match word rules">
+            ⚡ Word Pool${state.wordpool.stats.active ? ` (${state.wordpool.stats.active})` : ''}
+          </button>
           <button id="discStudioBtn" class="btn btn-small btn-ghost" type="button" aria-expanded="${state.discover.studioOpen}">
             Taste Profile (${(prof.loves || []).length})
           </button>
@@ -4127,7 +4410,11 @@
                   <div class="disc-body">
                     <div class="disc-card-top">
                       <h3 class="disc-card-title">${esc(c.name)}</h3>
-                      <span class="disc-match-pill">${c.matchPct}% Match</span>
+                      <div class="disc-card-badges">
+                        ${c.primaryOverride ? '<span class="wp-badge primary" title="Strict Primary Override*">★ Primary Override*</span>' : ''}
+                        ${c.fuzzyMatch ? '<span class="wp-badge fuzzy" title="Fuzzy Match from Word Pool">Fuzzy Match</span>' : ''}
+                        <span class="disc-match-pill">${c.matchPct}% Match</span>
+                      </div>
                     </div>
                     <div class="disc-card-meta">
                       <span>${c.kind === 'movie' ? 'Movie' : 'Series'}</span>
@@ -4165,6 +4452,7 @@
             </div>`
       }`;
 
+    $('#discWordPoolBtn', view)?.addEventListener('click', () => openDrawer('wordpool'));
     $('#discStudioBtn', view)?.addEventListener('click', () => {
       state.discover.studioOpen = !state.discover.studioOpen;
       renderDiscoverView();

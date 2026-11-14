@@ -77,9 +77,10 @@
         <span>Hidden</span>
         <span id="topHiddenCount" class="count count-hidden" hidden>0</span>
       </button>
-      <button id="myShowsBtn" class="btn btn-ghost" type="button" title="Open Settings">
-        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 6h16M4 12h16M4 18h10" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
-        <span>Settings</span>
+      <button id="myShowsBtn" class="btn btn-ghost" type="button" title="Open Control Center (M)">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h10M18 7h2M14 5v4M4 12h4M12 12h8M8 10v4M4 17h12M20 17h0M16 15v4" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+        <span>Control Center</span>
+        <span id="topWpCount" class="count count-wp" hidden>0</span>
       </button>
     </div>
   </header>
@@ -180,48 +181,89 @@
   <section id="discoverView" class="discover-view" aria-live="polite" hidden></section>
   <section id="graxoboltView" class="graxobolt-view" aria-label="Graxobolt Content Galaxy" hidden></section>
 
-  <!-- Settings & Hidden drawer -->
+  <!-- Control Center (Word Pool, Preferences, Sync, Alerts, Feeds & Hidden) -->
   <div id="drawerScrim" class="scrim" hidden></div>
-  <aside id="drawer" class="drawer" aria-hidden="true" aria-label="Settings">
-    <div class="drawer-head">
-      <div>
+  <aside id="drawer" class="drawer control-center" role="dialog" aria-modal="true" aria-hidden="true" aria-label="Control Center">
+    <div class="cc-head">
+      <div class="cc-head-left">
         <div class="drawer-title-row">
-          <h2>Settings</h2>
-          <div class="seg seg-sm" id="drawerMediaSeg" role="group" aria-label="Menu section">
-            <button data-value="settings" class="on">Settings</button>
-            <button data-value="hidden" title="View &amp; unhide hidden shows and movies">Hidden <span id="drawerHiddenCount" class="seg-count seg-count-hidden" hidden>0</span></button>
-          </div>
+          <span class="cc-logo" aria-hidden="true">🎛️</span>
+          <h2>Control Center</h2>
         </div>
         <p id="drawerSub" class="muted">0 shows · 0 movies</p>
       </div>
-      <button id="drawerClose" class="icon-btn" type="button" aria-label="Close">
-        <svg viewBox="0 0 24 24"><path d="M6 6l12 12M18 6 6 18" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"/></svg>
-      </button>
-    </div>
-    <div id="drawerSettingsPane" class="drawer-settings">
-      <div class="drawer-actions">
+      <div class="cc-head-actions">
         <button id="refreshBtn" class="btn btn-small btn-ghost" type="button" title="Refresh shows &amp; movies from TVmaze and TMDB (also runs automatically twice a month looking 2 weeks ahead)">
           <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20 11a8 8 0 1 0-2.3 5.7M20 5v6h-6" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
-          Refresh from TVmaze
+          <span>Refresh Sync</span>
+        </button>
+        <button id="drawerClose" class="icon-btn" type="button" aria-label="Close Control Center">
+          <svg viewBox="0 0 24 24"><path d="M6 6l12 12M18 6 6 18" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"/></svg>
         </button>
       </div>
-      <div id="themeSettingsBox" class="theme-settings-box" hidden></div>
-      <div id="apiKeysBox" class="api-keys-box" hidden></div>
-      <div id="interestsBox" class="interests-box" hidden></div>
-      <div id="hiddenSettingsBox" class="hidden-settings-box" hidden></div>
-      <div id="discoveryBox" class="discovery-box" hidden></div>
-      <div id="digestBox" class="digest-box" hidden></div>
-      <div id="alertsBox" class="alerts-box" hidden></div>
-      <div id="backupBox" class="backup-box" hidden></div>
-      <div id="extSettingsBox" class="ext-settings-box" hidden></div>
     </div>
-    <div class="drawer-tools">
-      <input id="showFilter" type="search" placeholder="Filter hidden…" autocomplete="off" />
+
+    <div class="cc-body">
+      <nav class="cc-nav" id="ccNav" role="tablist" aria-label="Control Center sections">
+        <button type="button" class="cc-nav-btn on" data-cc-tab="wordpool" role="tab" aria-selected="true">
+          <span>⚡ Word Pool</span>
+          <span id="ccWpCount" class="seg-count" hidden>0</span>
+        </button>
+        <button type="button" class="cc-nav-btn" data-cc-tab="appearance" role="tab" aria-selected="false">
+          <span>🎨 Style &amp; Interests</span>
+        </button>
+        <button type="button" class="cc-nav-btn" data-cc-tab="sync" role="tab" aria-selected="false">
+          <span>🔄 Sync &amp; API Keys</span>
+        </button>
+        <button type="button" class="cc-nav-btn" data-cc-tab="alerts" role="tab" aria-selected="false">
+          <span>🔔 Alerts &amp; Digest</span>
+        </button>
+        <button type="button" class="cc-nav-btn" data-cc-tab="feeds" role="tab" aria-selected="false">
+          <span>🧰 Backup, .ics &amp; Search</span>
+        </button>
+        <button type="button" class="cc-nav-btn" data-cc-tab="hidden" role="tab" aria-selected="false" title="View &amp; unhide hidden shows and movies">
+          <span>👁 Hidden</span>
+          <span id="drawerHiddenCount" class="seg-count seg-count-hidden" hidden>0</span>
+        </button>
+      </nav>
+
+      <div class="cc-panels" id="ccPanels">
+        <section class="cc-panel" data-cc-panel="wordpool">
+          <div id="wordPoolBox" class="wordpool-box"></div>
+        </section>
+
+        <section class="cc-panel" data-cc-panel="appearance" hidden>
+          <div id="themeSettingsBox" class="theme-settings-box" hidden></div>
+          <div id="interestsBox" class="interests-box" hidden></div>
+          <div id="hiddenSettingsBox" class="hidden-settings-box" hidden></div>
+        </section>
+
+        <section class="cc-panel" data-cc-panel="sync" hidden>
+          <div id="discoveryBox" class="discovery-box" hidden></div>
+          <div id="apiKeysBox" class="api-keys-box" hidden></div>
+        </section>
+
+        <section class="cc-panel" data-cc-panel="alerts" hidden>
+          <div id="alertsBox" class="alerts-box" hidden></div>
+          <div id="digestBox" class="digest-box" hidden></div>
+        </section>
+
+        <section class="cc-panel" data-cc-panel="feeds" hidden>
+          <div id="backupBox" class="backup-box" hidden></div>
+          <div id="extSettingsBox" class="ext-settings-box" hidden></div>
+        </section>
+
+        <section class="cc-panel" data-cc-panel="hidden" hidden>
+          <div class="drawer-tools">
+            <input id="showFilter" type="search" placeholder="Filter hidden…" autocomplete="off" />
+          </div>
+          <div id="hiddenBar" class="hidden-bar" hidden>
+            <span id="hiddenSummary" class="muted">0 hidden items</span>
+          </div>
+          <ul id="showList" class="show-list"></ul>
+        </section>
+      </div>
     </div>
-    <div id="hiddenBar" class="hidden-bar" hidden>
-      <span id="hiddenSummary" class="muted">0 hidden items</span>
-    </div>
-    <ul id="showList" class="show-list"></ul>
   </aside>
 
   <!-- Episode modal -->

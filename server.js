@@ -230,7 +230,6 @@ function buildIcsFeed({ media = 'both', favoritesOnly = false } = {}) {
       const summary = `${s.name} · ${code}${e.name ? ` — ${e.name}` : ''}`;
       const ch = (s.network && s.network.name) || (s.webChannel && s.webChannel.name) || '';
       const desc = [
-        e.virtual ? `Director's Choice (Orig ${e.originYear || ''})` : '',
         ch ? `Channel: ${ch}` : '',
         (s.genres || []).join(', '),
       ]
@@ -448,38 +447,6 @@ async function handleApi(req, res, url) {
     return sendJson(res, 200, { ok: true, id: show.id, favorite: show.favorite, show });
   }
 
-  const dcRoute = pathname.match(/^\/api\/shows\/(\d+)\/directors-choice$/);
-  if (dcRoute && method === 'POST') {
-    const body = await readBody(req).catch(() => ({}));
-    let id = Number(dcRoute[1]) || 0;
-    if (!id && (body.imdbId || body.name)) {
-      const resolved = await tvmaze.resolveShow({ imdbId: body.imdbId || null, name: body.name || '', year: body.year || '' }).catch(() => null);
-      if (resolved && resolved.id) id = resolved.id;
-    }
-    if (!id) return sendJson(res, 404, { error: 'Could not resolve show on TVmaze' });
-    if (!store.isTracked(id)) {
-      if (hidden.has('show', id)) {
-        const entry = hidden.take('show', id);
-        if (entry && entry.record) await store.restoreShow(entry.record);
-        else await store.addShow(id, 'directors-choice');
-      } else {
-        await store.addShow(id, 'directors-choice');
-      }
-    }
-    const show = store.setDirectorsChoice(id, body.enabled, { anchorDate: body.anchorDate || null });
-    if (!show) return sendJson(res, 404, { error: 'Show not found' });
-    if (show.directorsChoice && show.directorsChoice.enabled && !store.getSettings().showDirectorsChoice) {
-      store.saveSettings({ showDirectorsChoice: true });
-    }
-    return sendJson(res, 200, {
-      ok: true,
-      id: show.id,
-      directorsChoice: show.directorsChoice,
-      show,
-      settings: store.getSettings(),
-    });
-  }
-
   const extq = pathname.match(/^\/api\/shows\/(\d+)\/(?:ext|td)-query$/);
   if (extq && method === 'POST') {
     const body = await readBody(req);
@@ -603,7 +570,6 @@ async function handleApi(req, res, url) {
         onCalendar: item.kind === 'movie' ? movies.isTracked(item.id) : store.isTracked(item.id),
         hidden: item.kind === 'movie' ? hidden.has('movie', item.id) : hidden.has('show', item.id),
         ...(!isDirectNameMatch ? { fuzzyMatch: true, fuzzyLabel: 'Fuzzy Match' } : {}),
-        ...(meta && meta.directorsChoice ? { directorsChoice: meta.directorsChoice } : {}),
         ...(wp ? { wordPool: wp } : {}),
       };
     });
@@ -644,7 +610,6 @@ async function handleApi(req, res, url) {
         fuzzySnippet: fh.snippet,
         onCalendar: isMovie ? movies.isTracked(itemId) : store.isTracked(itemId),
         hidden: isMovie ? hidden.has('movie', itemId) : hidden.has('show', itemId),
-        ...(meta && meta.directorsChoice ? { directorsChoice: meta.directorsChoice } : {}),
         ...(wp ? { wordPool: wp } : {}),
       });
     }
@@ -658,10 +623,7 @@ async function handleApi(req, res, url) {
     if (!isDate(from) || !isDate(to)) return sendJson(res, 400, { error: 'from/to must be YYYY-MM-DD' });
     const withSummaries = searchParams.get('summaries') === '1';
     const includeHidden = shouldIncludeHidden(searchParams);
-    const includeDirectorsChoice = searchParams.has('directorsChoice')
-      ? searchParams.get('directorsChoice') === '1'
-      : undefined;
-    const epList = store.schedule(from, to, { withSummaries, includeHidden, includeDirectorsChoice });
+    const epList = store.schedule(from, to, { withSummaries, includeHidden });
     const mvList = movies.schedule(from, to, { withSummaries, includeHidden });
     if (wordpool.hasActiveEntries()) {
       const showWpCache = new Map();

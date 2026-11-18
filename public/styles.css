@@ -317,15 +317,6 @@ svg { width: 18px; height: 18px; flex: none; }
 .fav-toggle.on svg { color: var(--fav-star); }
 .watched-toggle.on { border-color: var(--ok-border); background: var(--ok-bg); color: var(--ok-fg); }
 .watched-toggle.on svg { color: var(--ok); }
-.dc-toggle.on { border-color: rgba(245, 158, 11, 0.55); background: rgba(245, 158, 11, 0.14); color: #fde68a; }
-.dc-toggle.on svg { color: #fbbf24; }
-.dc-toggle.on .fav-count { background: rgba(245, 158, 11, 0.22); color: #fef3c7; }
-[data-theme="bistro"] .dc-toggle.on, [data-theme="newspaper"] .dc-toggle.on, [data-theme="swiss"] .dc-toggle.on, [data-theme="botanical"] .dc-toggle.on, [data-theme="popart"] .dc-toggle.on {
-  color: #92400e; background: rgba(245, 158, 11, 0.2); border-color: rgba(180, 83, 9, 0.45);
-}
-[data-theme="bistro"] .dc-toggle.on .fav-count, [data-theme="newspaper"] .dc-toggle.on .fav-count, [data-theme="swiss"] .dc-toggle.on .fav-count, [data-theme="botanical"] .dc-toggle.on .fav-count, [data-theme="popart"] .dc-toggle.on .fav-count {
-  color: #78350f;
-}
 .fav-count {
   min-width: 18px; height: 18px; padding: 0 5px; border-radius: 999px;
   display: inline-grid; place-items: center; font-size: 11px; font-weight: 700;
@@ -435,7 +426,6 @@ svg { width: 18px; height: 18px; flex: none; }
 .ep-tag.special { background: linear-gradient(120deg, #6366f1, #3b82f6); }
 .ep-tag.movie { background: linear-gradient(120deg, #0ea5e9, #10b981); }
 .ep-tag.new { background: linear-gradient(120deg, #059669, #0284c7); }
-.ep-tag.dc { background: linear-gradient(120deg, #d97706, #9333ea); }
 .ep-auto {
   position: absolute; right: 8px; top: 8px; z-index: 2; font-size: 9.5px; font-weight: 800;
   letter-spacing: 0.06em; text-transform: uppercase; padding: 2px 6px; border-radius: 6px;
@@ -460,10 +450,6 @@ svg { width: 18px; height: 18px; flex: none; }
 .ev-pill.special { background: rgba(99, 102, 241, 0.22); border: 1px solid rgba(99, 102, 241, 0.5); color: #c7d2fe; }
 .ev-pill.movie { background: rgba(14, 165, 233, 0.2); border: 1px solid rgba(14, 165, 233, 0.45); color: #bae6fd; }
 .ev-pill.new { background: rgba(16, 185, 129, 0.22); border: 1px solid rgba(16, 185, 129, 0.5); color: #a7f3d0; }
-.ev-pill.dc { background: rgba(245, 158, 11, 0.2); border: 1px solid rgba(245, 158, 11, 0.5); color: #fde68a; }
-[data-theme="bistro"] .ev-pill.dc, [data-theme="newspaper"] .ev-pill.dc, [data-theme="swiss"] .ev-pill.dc, [data-theme="botanical"] .ev-pill.dc, [data-theme="popart"] .ev-pill.dc {
-  color: #92400e; background: rgba(245, 158, 11, 0.2); border-color: rgba(180, 83, 9, 0.42);
-}
 .ep-compact-pills { display: none; flex-wrap: wrap; gap: 4px; margin: 1px 0 2px; }
 .compact .ep-compact-pills { display: flex; }
 .compact .ep-compact-pills .ev-pill,
@@ -1619,26 +1605,15 @@ svg { width: 18px; height: 18px; flex: none; }
 .disc-act-btn.love:hover { background: var(--fav-on-bg); border-color: var(--fav-on-border); color: var(--fav-on-fg); }
 .disc-act-btn.seen:hover { background: var(--ok-bg); border-color: var(--ok-border); color: var(--ok-fg); }
 .disc-act-btn.nope:hover { background: var(--danger-bg); border-color: var(--danger-border); color: var(--danger-fg); }
-.disc-act-btn.dc:hover, .disc-act-btn.dc.on { background: rgba(245, 158, 11, 0.18); border-color: rgba(245, 158, 11, 0.55); color: #fde68a; }
-.btn-dc.on { background: rgba(245, 158, 11, 0.2); border-color: rgba(245, 158, 11, 0.55); color: #fde68a; }
 
-/* Search quick 3D & Director's Choice launch buttons */
+/* Search quick 3D launch button */
 .sr-acts { display: flex; align-items: center; gap: 6px; }
-.sr-gb-btn, .sr-dc-btn {
+.sr-gb-btn {
   height: 32px; padding: 0 9px; border-radius: 8px; border: 1px solid var(--border-strong);
   background: var(--control-bg); color: var(--active-tint-fg); font-size: 12px; font-weight: 700;
   white-space: nowrap; transition: background 0.14s, border-color 0.14s;
 }
 .sr-gb-btn:hover { background: var(--active-tint-bg); border-color: var(--active-tint-border); }
-.sr-dc-btn { color: var(--muted); }
-.sr-dc-btn:hover, .sr-dc-btn.on { background: rgba(245, 158, 11, 0.18); border-color: rgba(245, 158, 11, 0.55); color: #fde68a; }
-[data-theme="bistro"] :is(.disc-act-btn.dc, .btn-dc, .sr-dc-btn):is(.on, :hover),
-[data-theme="newspaper"] :is(.disc-act-btn.dc, .btn-dc, .sr-dc-btn):is(.on, :hover),
-[data-theme="swiss"] :is(.disc-act-btn.dc, .btn-dc, .sr-dc-btn):is(.on, :hover),
-[data-theme="botanical"] :is(.disc-act-btn.dc, .btn-dc, .sr-dc-btn):is(.on, :hover),
-[data-theme="popart"] :is(.disc-act-btn.dc, .btn-dc, .sr-dc-btn):is(.on, :hover) {
-  color: #92400e; background: rgba(245, 158, 11, 0.2); border-color: rgba(180, 83, 9, 0.45);
-}
 
 /* ---------- Graxobolt 3D Galaxy View ---------- */
 body.gb-active { display: flex; flex-direction: column; height: 100dvh; min-height: 0; overflow: hidden; }

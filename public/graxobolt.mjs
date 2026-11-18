@@ -495,7 +495,7 @@ export function mountGraxobolt(container, callbacks) {
 
   const THERMAL_MODES = [
     { id: 'affinity', label: 'Affinity Heat', hint: 'Taste DNA resonance & favorites' },
-    { id: 'momentum', label: 'Momentum Heat', hint: 'Premiering, airing, & Director\'s Choice' },
+    { id: 'momentum', label: 'Momentum Heat', hint: 'Premiering & currently airing shows' },
     { id: 'backlog', label: 'Backlog Heat', hint: 'Unwatched episodes & queued releases' },
     { id: 'lore', label: 'Word Pool & Lore Heat', hint: 'Primary/Fuzzy matches & cached Wikipedia depth' },
   ];
@@ -528,7 +528,7 @@ export function mountGraxobolt(container, callbacks) {
       if (nd.wordPool && nd.wordPool.fuzzy) return 82;
       return Math.min(80, 22 + (nd.degree || 1) * 10);
     }
-    if (metric === 'momentum') return nd.directorsChoice ? 92 : 48;
+    if (metric === 'momentum') return 48;
     if (metric === 'backlog') return nd.seen ? 10 : 62;
     return nd.favorite || nd.loved ? 95 : nd.matchPct || 55;
   }
@@ -1297,7 +1297,6 @@ export function mountGraxobolt(container, callbacks) {
         isMedia
           ? `<div class="gb-ins-media-acts">
               ${!nd.tracked ? '<button type="button" class="disc-act-btn primary" data-gb-act="track">+ Calendar</button>' : ''}
-              ${nd.kind === 'show' ? `<button type="button" class="disc-act-btn dc${nd.directorsChoice ? ' on' : ''}" data-gb-act="dc" title="Virtual Release starting Today (shifts S01E01 to today)">🎬 ${nd.directorsChoice ? 'DC On' : "Director's Choice"}</button>` : ''}
               <button type="button" class="disc-act-btn love" data-gb-act="liked">${nd.loved ? '♥ Loved' : '♥ Love'}</button>
               <button type="button" class="disc-act-btn seen" data-gb-act="seen">✓ Seen</button>
               <button type="button" class="disc-act-btn nope" data-gb-act="dislike">× Hide</button>
@@ -1336,10 +1335,7 @@ export function mountGraxobolt(container, callbacks) {
         if (ok) {
           sound.playConfirm();
           if (action === 'track') nd.tracked = true;
-          else if (action === 'dc') {
-            nd.directorsChoice = typeof ok === 'object' && 'enabled' in ok ? Boolean(ok.enabled) : !nd.directorsChoice;
-            if (nd.directorsChoice) nd.tracked = true;
-          } else if (action === 'liked') nd.loved = true;
+          else if (action === 'liked') nd.loved = true;
           else if (action === 'seen') nd.seen = true;
           else if (action === 'dislike') {
             nd.hidden = true;

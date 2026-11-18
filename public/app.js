@@ -219,7 +219,6 @@
     channel: store.get('channel', ''),
     favoritesOnly: store.get('favOnly', '0') === '1',
     hideWatched: store.get('hideWatched', '0') === '1',
-    showDirectorsChoice: store.get('showDc', '1') !== '0',
     timeMode: store.get('timeMode', 'local'),
     density: VALID_DENSITIES.has(rawDensity) ? rawDensity : 'cards',
     tab: ['discover', 'graxobolt'].includes(store.get('tab', 'calendar')) ? store.get('tab', 'calendar') : 'calendar',
@@ -240,7 +239,6 @@
       interests: [],
       showHidden: false,
       hideWatched: false,
-      showDirectorsChoice: true,
       notifyBrowser: false,
       webhookUrl: '',
       style: store.get('style', 'midnight'),
@@ -285,7 +283,6 @@
       interests: [],
       showHidden: false,
       hideWatched: false,
-      showDirectorsChoice: true,
       notifyBrowser: false,
       webhookUrl: '',
       style: prevStyle || 'midnight',
@@ -295,9 +292,6 @@
     state.hideWatched = Boolean(state.settings.hideWatched);
     store.set('hideWatched', state.hideWatched ? '1' : '0');
     updateWatchedFilterUi();
-    state.showDirectorsChoice = state.settings.showDirectorsChoice !== false;
-    store.set('showDc', state.showDirectorsChoice ? '1' : '0');
-    updateDcUi();
     if (themeSaveInflight) state.settings.style = prevStyle;
     else if (state.settings.style && (alwaysApplyTheme || state.settings.style !== prevStyle)) applyTheme(state.settings.style);
   }
@@ -364,7 +358,6 @@
     $('#movieCount').textContent = movieList.filter((m) => !m.hidden).length;
     updateFavUi();
     updateWatchedFilterUi();
-    updateDcUi();
     updateHiddenUi();
     populateGenres();
     populateChannels();
@@ -440,19 +433,6 @@
     if (!btn) return;
     btn.classList.toggle('on', state.hideWatched);
     btn.setAttribute('aria-pressed', String(state.hideWatched));
-  }
-
-  function updateDcUi() {
-    let dcCount = 0;
-    for (const s of state.shows.values()) {
-      if (s.directorsChoice && s.directorsChoice.enabled && !s.hidden) dcCount++;
-    }
-    const cnt = $('#dcCount');
-    if (cnt) cnt.textContent = dcCount;
-    const btn = $('#dcFilterBtn');
-    if (!btn) return;
-    btn.classList.toggle('on', state.showDirectorsChoice);
-    btn.setAttribute('aria-pressed', String(state.showDirectorsChoice));
   }
 
   function viewRange() {
@@ -568,7 +548,6 @@
     }
     if (state.media !== 'movies') {
       for (const ep of state.episodes) {
-        if (ep.virtual && !state.showDirectorsChoice) continue;
         if (state.hideWatched && ep.watched) continue;
         const show = state.shows.get(ep.showId);
         if (!matchesCalendarFilters(show, [ep])) continue;
@@ -660,12 +639,8 @@
       return {
         primary: { text: 'Movie', short: 'Movie', cls: 'movie', title: 'Movie release' },
         isNew: Boolean(eps[0] && eps[0].isNew),
-        isDc: false,
-        dcYear: '',
       };
     }
-    const isDc = eps.some((e) => e.virtual);
-    const dcYear = (eps.find((e) => e.originYear) || {}).originYear || (g.show.directorsChoice && g.show.directorsChoice.originYear) || '';
     const premSeries = eps.some((e) => e.premiere === 'series' || (e.premiere == null && e.season === 1 && e.number === 1));
     const premSeason = eps.some((e) => e.premiere === 'season' || (e.premiere == null && e.season > 1 && e.number === 1));
     const finSeries = eps.some((e) => e.finale === 'series');
@@ -697,16 +672,7 @@
     } else if (isNew) {
       primary = { text: 'New', short: 'New', cls: 'new', title: 'New series in its debut run' };
     }
-    return { primary, isNew: !premSeries && primary?.cls !== 'new' && isNew, isDc, dcYear };
-  }
-
-  function dcBadgeHtml(dcYear, asPill = false) {
-    const yr = dcYear ? `'${String(dcYear).slice(-2)}` : '';
-    const txt = yr ? `🎬 DC ${yr}` : '🎬 DC';
-    const title = `Director's Choice Virtual Release${dcYear ? ` (Orig ${dcYear})` : ''}`;
-    return asPill
-      ? `<span class="ev-pill dc" title="${esc(title)}">${esc(txt)}</span>`
-      : `<span class="ep-tag dc" title="${esc(title)}">${esc(txt)}</span>`;
+    return { primary, isNew: !premSeries && primary?.cls !== 'new' && isNew };
   }
 
   function interestSet() {
@@ -778,7 +744,7 @@
       : multi
       ? `${eps.length} episodes`
       : first.name || 'TBA';
-    const { primary, isNew, isDc, dcYear } = groupBadges(g);
+    const { primary, isNew } = groupBadges(g);
     const wpHtml = wpBadgesHtml(show, eps, true);
     const wpRowHtml = wpBadgesHtml(show, eps, false);
     const interests = matchedInterests(show);
@@ -788,7 +754,6 @@
     const isCompact = state.density === 'compact';
     const tlBadges = !isCompact
       ? [
-          isDc ? dcBadgeHtml(dcYear, false) : '',
           primary ? `<span class="ep-tag ${primary.cls}" title="${esc(primary.title)}">${esc(primary.text)}</span>` : '',
           isNew ? '<span class="ep-tag new" title="Brand-new release">New</span>' : '',
         ]
@@ -800,7 +765,6 @@
           wpHtml,
           isHidden ? '<span class="hidden-pill">Hidden</span>' : '',
           w.partial ? `<span class="watch-prog">${w.done}/${w.total} ✓</span>` : '',
-          isDc ? dcBadgeHtml(dcYear, true) : '',
           primary && primary.cls !== 'movie' ? evPillHtml(primary, true) : '',
           isNew ? '<span class="ev-pill new">New</span>' : '',
         ]
@@ -859,7 +823,7 @@
       ? `${eps.length} episodes`
       : first.name || 'TBA';
     const time = isMovie ? (src.kind === 'tv' ? 'TV' : src.kind === 'physical' ? 'Disc' : 'Digital') : timeLabel(first, show);
-    const { primary, isNew, isDc, dcYear } = groupBadges(g);
+    const { primary, isNew } = groupBadges(g);
     const interests = matchedInterests(show);
     const isPrem = Boolean(primary && (primary.cls === 'series-prem' || primary.cls === 'season-prem'));
     const thumb = show.background && isMovie
@@ -882,7 +846,6 @@
               ${wpBadgesHtml(show, eps, true)}
               ${isHidden ? '<span class="hidden-pill">Hidden</span>' : ''}
               ${w.partial ? `<span class="watch-prog">${w.done}/${w.total} ✓</span>` : ''}
-              ${isDc ? dcBadgeHtml(dcYear, true) : ''}
               ${primary ? evPillHtml(primary, primary.cls !== 'movie') : ''}
               ${isNew ? '<span class="ev-pill new">New</span>' : ''}
               ${interests.length ? interestPillsHtml(interests, isPrem, true) : ''}
@@ -958,7 +921,7 @@
       : multi
       ? `${eps.length} episodes`
       : first.name || 'TBA';
-    const { primary, isNew, isDc, dcYear } = groupBadges(g);
+    const { primary, isNew } = groupBadges(g);
     const interests = matchedInterests(show);
     const isPrem = Boolean(primary && (primary.cls === 'series-prem' || primary.cls === 'season-prem'));
     const time = isMovie ? (src.kind === 'tv' ? 'TV Premiere' : src.kind === 'physical' ? 'Physical' : 'Streaming') : timeLabel(first, show);
@@ -966,7 +929,6 @@
     const art = artHtml(show, priority);
     const visBtn = visibilityBtnHtml(show, kind);
     const tlBadges = [
-      isDc ? dcBadgeHtml(dcYear, false) : '',
       primary ? `<span class="ep-tag ${primary.cls}" title="${esc(primary.title)}">${esc(primary.text)}</span>` : '',
       isNew ? '<span class="ep-tag new" title="Brand-new release">New</span>' : '',
     ]
@@ -1045,7 +1007,7 @@
     const last = eps[eps.length - 1];
     const src = sourceOf(show);
     const brand = brandColor(src.name);
-    const { primary, isNew, isDc, dcYear } = groupBadges(g);
+    const { primary, isNew } = groupBadges(g);
     const interests = matchedInterests(show);
     const isPrem = Boolean(primary && (primary.cls === 'series-prem' || primary.cls === 'season-prem'));
     const multi = !isMovie && eps.length > 1;
@@ -1063,7 +1025,6 @@
       wpBadgesHtml(show, eps, true),
       w.allDone ? '<span class="m-lbl" title="Watched">✓</span>' : w.partial ? `<span class="m-lbl">${w.done}/${w.total}</span>` : '',
       isHidden ? '<span class="hidden-pill">Hidden</span>' : '',
-      isDc ? dcBadgeHtml(dcYear, true) : '',
       primary && primary.cls !== 'movie' ? evPillHtml(primary, true) : '',
       isNew ? '<span class="ev-pill new">New</span>' : '',
       show.favorite ? '<span class="m-lbl m-lbl-fav" title="Favorite">★</span>' : '',
@@ -1134,12 +1095,11 @@
     const metaParts = [leadLabel, `${total} ${noun}${total === 1 ? '' : 's'}`];
     if (state.favoritesOnly) metaParts.push('Favorites only');
     if (state.hideWatched) metaParts.push('Unwatched only');
-    if (!state.showDirectorsChoice) metaParts.push("Director's Choice hidden");
     if (state.genre) metaParts.push(state.genre);
     if (state.channel) metaParts.push(state.channel);
     if (state.media !== 'movies') metaParts.push(state.timeMode === 'local' ? 'your local time' : 'network time');
     const clearBtn =
-      total === 0 && (state.filter !== 'all' || state.genre || state.channel || state.favoritesOnly || state.hideWatched || !state.showDirectorsChoice)
+      total === 0 && (state.filter !== 'all' || state.genre || state.channel || state.favoritesOnly || state.hideWatched)
         ? ' <button id="clearFiltersBtn" class="clear-filters" type="button">Clear filters</button>'
         : '';
     $('#weekMeta').innerHTML = esc(metaParts.join(' · ')) + clearBtn;
@@ -1160,7 +1120,6 @@
         if ($('#channelFilter')) $('#channelFilter').value = '';
         $('#channelWrap')?.classList.remove('active');
         updateFavUi();
-        if (!state.showDirectorsChoice) toggleDirectorsChoiceFilter(true);
         if (state.hideWatched) toggleHideWatched(false);
         else renderCalendar();
       });
@@ -2023,10 +1982,8 @@
     const multi = !isMovie && eps.length > 1;
     const statusCls = /running|released/i.test(show.status) ? 'running' : /ended/i.test(show.status) ? 'ended' : 'tbd';
     const epArg = isMovie ? null : first;
-    const { primary, isNew, isDc, dcYear } = groupBadges(g);
+    const { primary, isNew } = groupBadges(g);
     const isHidden = Boolean(show.hidden);
-    const dcOn = Boolean(!isMovie && ((show.directorsChoice && show.directorsChoice.enabled) || isDc));
-    const origYear = dcYear || (first && first.originYear) || (show.directorsChoice && show.directorsChoice.originYear) || (show.premiered || '').slice(0, 4);
     const extUrl = (det && !multi && det.episodeUrl) || (multi || isMovie ? show.url : first.url || show.url);
 
     $('#modalBody').innerHTML = `
@@ -2050,7 +2007,6 @@
       </div>
       <div class="m-content">
         <div class="m-facts">
-          ${dcOn ? `<span class="ev-pill dc" title="Virtual Release anchored to ${esc((show.directorsChoice && show.directorsChoice.anchorDate) || first.airdate || 'today')}">🎬 Director's Choice${origYear ? ` · Orig ${esc(origYear)}` : ''}</span>` : ''}
           ${primary ? evPillHtml(primary, false) : ''}
           ${isNew ? '<span class="ev-pill new">New</span>' : ''}
           ${srcBadge(src.name, src.kind)}
@@ -2086,7 +2042,6 @@
           }
           <button class="btn btn-watch${groupWatchInfo(g).allDone ? ' on' : ''}" id="modalWatch" type="button" aria-pressed="${groupWatchInfo(g).allDone}">${ICON.check} <span>${groupWatchInfo(g).allDone ? 'Watched' : 'Mark watched'}</span></button>
           <button class="btn btn-fav${show.favorite ? ' on' : ''}" id="modalFav" type="button" aria-pressed="${Boolean(show.favorite)}">${show.favorite ? ICON.star : ICON.starOutline} <span>${show.favorite ? 'Favorited' : 'Favorite'}</span></button>
-          ${!isMovie ? `<button class="btn btn-ghost btn-dc${dcOn ? ' on' : ''}" id="modalDcBtn" type="button" aria-pressed="${dcOn}" title="Schedule this show's full run virtually starting today">🎬 <span>${dcOn ? "Director's Choice ON" : "Director's Choice"}</span></button>` : ''}
           <button class="btn btn-ghost" id="modalGraxoboltBtn" type="button">⚡ Explore in Graxobolt</button>
           <a class="btn btn-ghost" id="modalExtLink" href="${esc(extUrl)}" target="_blank" rel="noopener noreferrer">${ICON.ext} ${isMovie ? 'TMDB' : 'TVmaze'}</a>
           ${show.imdbUrl ? `<a class="btn btn-ghost" href="${esc(show.imdbUrl)}" target="_blank" rel="noopener noreferrer">${ICON.ext} IMDb</a>` : ''}
@@ -2219,13 +2174,6 @@
       b.classList.toggle('on', fav);
       b.setAttribute('aria-pressed', String(fav));
       b.innerHTML = `${fav ? ICON.star : ICON.starOutline} <span>${fav ? 'Favorited' : 'Favorite'}</span>`;
-    });
-    $('#modalDcBtn')?.addEventListener('click', async (e) => {
-      const b = e.currentTarget;
-      b.disabled = true;
-      const res = await toggleShowDirectorsChoice(show.id, show.name, !dcOn);
-      if (res !== null) closeModal();
-      else b.disabled = false;
     });
     $('#modalHide')?.addEventListener('click', async () => {
       closeModal();
@@ -2363,38 +2311,6 @@
     }
   }
 
-  async function toggleShowDirectorsChoice(id, name, explicit = undefined, meta = {}) {
-    try {
-      const anchorDate = meta.anchorDate || ymd(new Date());
-      const res = await api(`/api/shows/${Number(id) || 0}/directors-choice`, {
-        method: 'POST',
-        body: JSON.stringify({
-          ...(explicit !== undefined ? { enabled: Boolean(explicit) } : {}),
-          anchorDate,
-          ...(meta.imdbId ? { imdbId: meta.imdbId } : {}),
-          ...(name ? { name } : {}),
-          ...(meta.year ? { year: meta.year } : {}),
-        }),
-      });
-      if (res.show) state.shows.set(res.show.id, { ...res.show, kind: 'show' });
-      if (res.settings) syncSettingsFromServer(res.settings, false);
-      const dc = res.directorsChoice;
-      const enabled = Boolean(dc && dc.enabled);
-      await reloadAll();
-      syncSearchState();
-      toast(
-        enabled
-          ? `🎬 Director's Choice: ${res.show ? res.show.name : name} starts today (${dc.originYear || ''} → ${dc.anchorDate})`
-          : `Turned off Director's Choice for ${res.show ? res.show.name : name}`,
-        'ok'
-      );
-      return { enabled, show: res.show, directorsChoice: dc };
-    } catch (e) {
-      toast(e.message, 'err');
-      return null;
-    }
-  }
-
   // ---------- Search ----------
   const searchInput = $('#searchInput');
   const searchResults = $('#searchResults');
@@ -2437,7 +2353,6 @@
               ${s.fuzzySnippet ? `<div class="sr-summary"><b>Match (${esc(s.fuzzyField || 'text')}):</b> ${esc(s.fuzzySnippet)}</div>` : s.summary ? `<div class="sr-summary">${esc(stripHtml(s.summary))}</div>` : ''}
             </div>
             <div class="sr-acts">
-              ${!isMovie ? `<button class="sr-dc-btn${s.directorsChoice && s.directorsChoice.enabled ? ' on' : ''}" data-idx="${i}" type="button" title="Director's Choice Virtual Release (start S01E01 today)">🎬 DC</button>` : ''}
               <button class="sr-gb-btn" data-idx="${i}" type="button" title="Explore in Graxobolt">⚡ Graxobolt</button>
               <button class="add-btn${s.onCalendar ? ' on' : s.hidden ? ' is-hidden' : ''}" data-id="${s.id}" data-kind="${isMovie ? 'movie' : 'show'}" type="button">${s.onCalendar ? '✓ On calendar' : s.hidden ? 'Unhide' : '+ Add'}</button>
             </div>
@@ -2507,15 +2422,12 @@
       const entry = (kind === 'movie' ? state.movies : state.shows).get(s.id);
       s.onCalendar = Boolean(entry && !entry.hidden);
       s.hidden = Boolean((entry && entry.hidden) || state.hiddenItems.some((h) => h.id === s.id && h.kind === kind));
-      if (kind === 'show') s.directorsChoice = entry && entry.directorsChoice ? entry.directorsChoice : null;
       const btn = $(`.add-btn[data-id="${s.id}"][data-kind="${kind}"]`, searchResults);
       if (btn) {
         btn.classList.toggle('on', s.onCalendar);
         btn.classList.toggle('is-hidden', s.hidden && !s.onCalendar);
         btn.textContent = s.onCalendar ? '✓ On calendar' : s.hidden ? 'Unhide' : '+ Add';
       }
-      const dcBtn = $(`.sr-dc-btn[data-idx]`, btn ? btn.closest('.sr-item') : searchResults);
-      if (dcBtn && kind === 'show') dcBtn.classList.toggle('on', Boolean(s.directorsChoice && s.directorsChoice.enabled));
     }
   }
 
@@ -2542,22 +2454,6 @@
     }
   });
   searchResults.addEventListener('click', async (e) => {
-    const dcBtn = e.target.closest('.sr-dc-btn');
-    if (dcBtn) {
-      const s = searchItems[Number(dcBtn.dataset.idx)];
-      if (!s || dcBtn.disabled) return;
-      dcBtn.disabled = true;
-      const next = !(s.directorsChoice && s.directorsChoice.enabled);
-      const res = await toggleShowDirectorsChoice(s.id, s.name, next, { year: (s.premiered || '').slice(0, 4) });
-      dcBtn.disabled = false;
-      if (res) {
-        s.onCalendar = true;
-        s.hidden = false;
-        s.directorsChoice = res.directorsChoice;
-        syncSearchState();
-      }
-      return;
-    }
     const gb = e.target.closest('.sr-gb-btn');
     if (gb) {
       const s = searchItems[Number(gb.dataset.idx)];
@@ -3827,22 +3723,6 @@
   }
   $('#watchedFilterBtn')?.addEventListener('click', () => toggleHideWatched());
 
-  async function toggleDirectorsChoiceFilter(explicit = undefined) {
-    const next = explicit !== undefined ? Boolean(explicit) : !state.showDirectorsChoice;
-    state.showDirectorsChoice = next;
-    store.set('showDc', next ? '1' : '0');
-    updateDcUi();
-    renderCalendar();
-    try {
-      const saved = await api('/api/settings', { method: 'POST', body: JSON.stringify({ showDirectorsChoice: next }) });
-      syncSettingsFromServer(saved, false);
-      if (next) await loadWeek(false);
-    } catch (err) {
-      toast(err.message, 'err');
-    }
-  }
-  $('#dcFilterBtn')?.addEventListener('click', () => toggleDirectorsChoiceFilter());
-
   // ---------- Period navigation & Month picker ----------
   function shiftWeek(n) {
     const todayStr = ymd(new Date());
@@ -4057,7 +3937,6 @@
     else if (e.key.toLowerCase() === 't') shiftWeek(0);
     else if (e.key.toLowerCase() === 'f') toggleFavFilter();
     else if (e.key.toLowerCase() === 'w') toggleHideWatched();
-    else if (e.key.toLowerCase() === 'c') toggleDirectorsChoiceFilter();
   });
 
   // ---------- Discover Deep-Dive & Graxobolt Tabs ----------
@@ -4101,19 +3980,7 @@
         gbController = mod.mountGraxobolt(gv, {
           api,
           toast,
-          onFeedback: async (payload) => {
-            if (payload && payload.action === 'dc') {
-              const it = payload.item || {};
-              const res = await toggleShowDirectorsChoice(
-                it.tvmazeId || payload.id || 0,
-                it.name,
-                it.directorsChoice !== undefined ? !it.directorsChoice : undefined,
-                { imdbId: it.imdbId || payload.imdbId, year: String(it.premiered || '').slice(0, 4) }
-              );
-              return res ? { enabled: res.enabled } : false;
-            }
-            return sendDiscoverFeedback(payload);
-          },
+          onFeedback: async (payload) => sendDiscoverFeedback(payload),
           onOpenModal: (item) => openDiscoverModal(item),
         });
       } catch (err) {
@@ -4431,7 +4298,6 @@
                     ${c.summary ? `<p class="disc-summary">${esc(c.summary)}</p>` : ''}
                     <div class="disc-card-acts" data-stop>
                       <button type="button" class="disc-act-btn primary" data-disc-act="track" data-disc-key="${esc(c.key)}">+ Calendar</button>
-                      ${c.kind === 'show' ? `<button type="button" class="disc-act-btn dc" data-disc-dc="${esc(c.key)}" title="Virtual Premiere starting Today (Director's Choice)">🎬 DC</button>` : ''}
                       <button type="button" class="disc-act-btn love" data-disc-act="liked" data-disc-key="${esc(c.key)}" title="Already seen and loved — trains Taste DNA">♥ Loved</button>
                       <button type="button" class="disc-act-btn seen" data-disc-act="seen" data-disc-key="${esc(c.key)}" title="Already watched — exclude cleanly">✓ Seen</button>
                       <button type="button" class="disc-act-btn nope" data-disc-act="dislike" data-disc-key="${esc(c.key)}" title="Not my taste — hide &amp; penalize traits">× Not for me</button>
@@ -4537,22 +4403,6 @@
       });
       return;
     }
-    const dcDiscBtn = e.target.closest('[data-disc-dc]');
-    if (dcDiscBtn) {
-      const item = ((state.discover.data && state.discover.data.items) || []).find((x) => x.key === dcDiscBtn.dataset.discDc);
-      if (!item || dcDiscBtn.disabled) return;
-      dcDiscBtn.disabled = true;
-      const res = await toggleShowDirectorsChoice(item.tvmazeId || 0, item.name, true, {
-        imdbId: item.imdbId,
-        year: String(item.premiered || '').slice(0, 4),
-      });
-      if (!res) dcDiscBtn.disabled = false;
-      else {
-        dcDiscBtn.classList.add('on');
-        dcDiscBtn.textContent = '🎬 DC On';
-      }
-      return;
-    }
     const gbBtn = e.target.closest('[data-disc-gb]');
     if (gbBtn) {
       const item = ((state.discover.data && state.discover.data.items) || []).find((x) => x.key === gbBtn.dataset.discGb);
@@ -4617,7 +4467,6 @@
         <p class="m-summary">${esc(item.summary || 'No description available.')}</p>
         <div class="m-actions">
           <button class="btn" id="discModTrack" type="button">+ Add to Calendar</button>
-          ${item.kind === 'show' ? `<button class="btn btn-ghost btn-dc" id="discModDc" type="button" title="Schedule full series starting today (Director's Choice)">🎬 Director's Choice</button>` : ''}
           <button class="btn btn-ghost" id="discModGraxobolt" type="button">⚡ Explore in Graxobolt</button>
           <button class="btn btn-ghost" id="discModLove" type="button">♥ Seen · Loved</button>
           <button class="btn btn-ghost" id="discModSeen" type="button">✓ Already Seen</button>
@@ -4664,16 +4513,6 @@
     });
     $('#discModLove').addEventListener('click', async () => {
       if (await sendDiscoverFeedback(actPayload('liked'))) closeModal();
-    });
-    $('#discModDc')?.addEventListener('click', async (e) => {
-      const btn = e.currentTarget;
-      btn.disabled = true;
-      const res = await toggleShowDirectorsChoice(item.tvmazeId || 0, item.name, true, {
-        imdbId: item.imdbId,
-        year: String(item.premiered || '').slice(0, 4),
-      });
-      if (res) closeModal();
-      else btn.disabled = false;
     });
     $('#discModGraxobolt')?.addEventListener('click', () => {
       closeModal();

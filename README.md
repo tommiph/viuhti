@@ -45,14 +45,13 @@ Press **`G`** (or switch to the **Graxobolt** tab) to explore movies, series, ca
   - Press **`V`** (or click **POV (V)**) anytime inside a seeded constellation to pull out into **Constellation Overview** and back; toggle **⚡ Auto-Dive** off to inspect stars on single-click, bloom **⚡ Expand (+1 Hop)** or **🌐 +Bloom Wiki Links** branches inline (`/api/galaxy/expand`), or double-click to dive. Use the breadcrumb trail to jump back to earlier stars in your journey.
 - **Desktop 6DoF & Mobile Touch Controls**:
   - Drag (`pointer`) or swipe with one finger to rotate the starfield view naturally across `X`/`Y`, **Right-Drag** (or `Ctrl`-Drag) to roll `Z`, pinch with two fingers on touchscreens or scroll the wheel to zoom cleanly along your view vector (with `touch-action: none` on the stage, canvas, and floating label pills), use `WASD` + `Q/E` + `Shift` to fly with warp boost, `Space` to toggle **Orbit**, and `R` / **Reset** to re-center the camera.
-  - Every Inspector card lets you act directly without leaving Graxobolt: **`+ Calendar`**, **`♥ Love`**, **`✓ Seen`**, **`× Hide`**, **`🎬 DC`** (Director's Choice virtual re-run), and **`Details`**.
+  - Every Inspector card lets you act directly without leaving Graxobolt: **`+ Calendar`**, **`♥ Love`**, **`✓ Seen`**, **`× Hide`**, and **`Details`**.
 
 ---
 
 ## Calendar & Home-Theater Features
 
 - **Five Calendar Views + Month Picker**: Switch via the icon view bar between **Day** (open episode/movie descriptions and per-episode checkboxes), **Cards**, **Compact**, **Month** (dense show names & event labels), and **Up Next** (rolling **14-day window** `[today .. today + 13]` on the current week).
-- **Director's Choice Virtual Premieres (`C` Shortcut)**: Replay older or completed TV series directly in your live calendar (`/api/shows/:id/directors-choice`) by shifting `S01E01` onto today's (or any chosen anchor) date while keeping the rest of the episode cadence intact, annotated with original premiere years (`Orig YYYY`), filterable via the **`Director's Choice`** pill (`C`), and included in `.ics` feeds.
 - **Rich Cast, Crew Portraits & Inline Spotlight Modals (`/api/item/rich`)**: Opening any calendar episode/movie or Discover card loads Actors & Crew grids with profile portraits backfilled from TVmaze, TMDB, and Wikidata/Wikipedia alongside awards, filming/setting locations, and formatted inline Spotlight dossiers (with click-to-inspect bio cards and an optional **`⚡ Explore in Graxobolt`** button).
 - **Episode & Movie Check-Offs (`data/watched.json`)**: Toggle watched/grabbed status per card, per individual episode in Day view or the Episode Modal, and track partial multi-episode progress (`1/2 ✓`). Toggle **Hide seen** (`W` shortcut) to keep only unwatched episodes and movies in view without touching your Hidden list.
 - **Sync Activity Digest (`data/digest.json`)**: Displays a dismissible summary banner whenever automatic refreshes add new TV shows/movies or detect upcoming TVmaze schedule changes, with expandable history inside **Settings → Sync Activity Digest**.
@@ -82,7 +81,6 @@ Press **`G`** (or switch to the **Graxobolt** tab) to explore movies, series, ca
 | `T` | Jump to today / current week |
 | `F` | Toggle **Favorites** filter (Calendar tab) |
 | `W` | Toggle **Hide seen** filter (Calendar tab) |
-| `C` | Toggle **Director's Choice** virtual re-runs (Calendar tab) |
 | `M` | Open / close **Settings & Hidden** drawer |
 | `Esc` | Close modal, dropdowns, or drawer |
 
